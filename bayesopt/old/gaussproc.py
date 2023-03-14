@@ -1,19 +1,18 @@
 import numpy as np
 from scipy import linalg, stats
 
-def gausskernel(p1,p2,param):
+def gausskernel(p1,p2,*,param=1.0):
     """Only for a function in 1D atm"""
-    return np.exp(-param*(p1-p2)**2)
+    return np.exp(-(p1-p2)**2 / (2*param**2))
 
-def cov_matrix(points_vec,param):
+def cov_matrix(points_vec,*,param=1.0,alpha=1e-6):
     mat = np.zeros((len(points_vec),len(points_vec)))
 
     for i,p1 in enumerate(points_vec):
         for j,p2 in enumerate(points_vec):
-            mat[i,j] = gausskernel(p1,p2,param)
+            mat[i,j] = gausskernel(p1,p2,param=param)
 
-    for i,_ in enumerate(mat):
-        mat[i,i] += 1e-6
+    mat += np.eye(len(points_vec))*alpha
 
     return mat
 
