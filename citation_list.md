@@ -18,6 +18,17 @@
 - How to get the dependent variance for sparse GPR
 - PDF version in dropbox
 
+## Sparse Gaussian Process Regression
+
+- Link: https://jejjohnson.github.io/research_journal/appendix/gps/2_sparse_gps/
+- How to sparsify the full GPR
+- This one is kinda meh
+
+## Compare different methods of sparsification
+
+- Link: http://gpss.cc/gprt/slides/chriswilliams.pdf
+- plan is to implement Subset of Regressors, Nystroem, and Projected Process Approximation
+
 ## Mathematics of Machine Learning
 
 - Link: http://www.pc-petersen.eu/ML_Lecture.pdf
