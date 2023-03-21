@@ -1,1 +1,1 @@
-from .sparseGPR import sparseGPR, RBF
+from .sparseGPR import *
