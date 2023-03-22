@@ -116,15 +116,11 @@ class sparseGPR:
 
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
 
-        print(f"ref_vec_PPA: {ref_vectors.shape}")
-
         if return_std:
             X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
-            print(f"X_cov: {X_cov.shape}")
 
             first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref))*1e-10,k) for k in ref_vectors])
             second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
-            print(f"first_temp: {first_temp.shape}\nsecond_temp: {second_temp.shape}")
             
             # stds = np.sqrt(X_cov + self.noise_var - first_temp + second_temp)
             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
@@ -147,8 +143,6 @@ class sparseGPR:
         ref_vectors = self._build_cov_func(self.X_ref, X)
 
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
-
-        print(f"ref_vec_SoR: {ref_vectors.shape}")
 
         if return_std:
             vars =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
@@ -180,7 +174,7 @@ class sparseGPR:
         means = full_vectors@self._fit_matrix@self.Y_data
 
         if return_std:
-            X_cov = self._build_cov_func(X, X)
+            X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
             temp = jnp.array([k.T@self._fit_matrix@k for k in full_vectors])          
             stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
 
