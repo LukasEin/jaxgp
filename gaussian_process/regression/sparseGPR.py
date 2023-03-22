@@ -1,10 +1,9 @@
-import jax
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
-from .kernels import RBF_ND
+from ..kernels import RBF
 
-class sparseGPR_ND:
-    def __init__(self, kernel=RBF_ND(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
+class sparseGPR:
+    def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
         '''
             supported kernels are found in the gaussion_process_regression.kernels folder
 
