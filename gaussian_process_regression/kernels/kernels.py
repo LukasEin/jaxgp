@@ -10,30 +10,26 @@ class RBF_ND:
         '''
         self.length_scale = length_scale
         self.coeff = coeff
-        self._len_scalar = jnp.isscalar(length_scale)
         
-        self.df = grad(self.eval, argnums=1)
+        self.df = grad(self.eval_func, argnums=1)
         self.ddf = grad(self.df)
 
     def eval_func(self, x1, x2):
         '''
             returns RBF(x1, x2)
-            x1.shape = (n_samples, n_features)
-            x2.shape = x1.shape
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
         '''
-        if self._len_scalar:
-            diff = (x1 - x2) / self.length_scale
-        else:
-            diff = jnp.matmul((x1 - x2),self.length_scale)
+        diff = (x1 - x2) / self.length_scale
 
-        return self.coeff * jnp.exp(-0.5 * jnp.matmul(diff, diff.T))
+        return self.coeff * jnp.exp(-0.5 * jnp.dot(diff, diff))
     
     def eval_dx2(self, x1, x2):
         '''
             returns d/dx1 RBF(x1, x2)
-            x1.shape = (n_samples, n_features)
-            x2.shape = x1.shape
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
         '''
         return self.df(x1, x2)
@@ -41,8 +37,8 @@ class RBF_ND:
     def eval_ddx1x2(self, x1, x2):
         '''
             returns dd/dx1dx2 RBF(x1, x2)
-            x1.shape = (n_samples, n_features)
-            x2.shape = x1.shape
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
         '''
         return self.ddf(x1, x2)
