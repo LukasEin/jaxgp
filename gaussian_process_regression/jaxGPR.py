@@ -1,9 +1,10 @@
 import jax
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
+from .kernels import RBF_ND
 
 class sparseGPR_ND:
-    def __init__(self, kernel, n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
+    def __init__(self, kernel=RBF_ND(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
         '''
             supported kernels are found in the gaussion_process_regression.kernels folder
 
@@ -20,7 +21,7 @@ class sparseGPR_ND:
         if X_ref is None:
             raise ValueError("X_ref can't be None!")
         self.X_ref = X_ref
-        self._K_ref = self.kernel.eval_func(X_ref,X_ref)
+        self._K_ref = self._build_cov_func(X_ref, X_ref)
 
         sparse_methods = ["ppa", "sor", "ny"]
         if sparse_method not in sparse_methods:
@@ -70,10 +71,10 @@ class sparseGPR_ND:
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
         '''
-        K_MN = self.kernel.eval_func(self.X_ref,self.X_data[:self.n_datapoints])
+        K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
-        for dim in self.n_derivpoints:
-            K_deriv = self.kernel.eval_dx2(self.X_ref,self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim])
+        for i,dim in enumerate(self.n_derivpoints):
+            K_deriv = self._build_cov_dx2(self.X_ref, self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], index=i)
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
             sum_dims += dim
         K_MN = K_MN.T
@@ -89,10 +90,10 @@ class sparseGPR_ND:
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
         '''
-        K_MN = self.kernel.eval_func(self.X_ref,self.X_data[:self.n_datapoints])
+        K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
-        for dim in self.n_derivpoints:
-            K_deriv = self.kernel.eval_dx2(self.X_ref,self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim])
+        for i,dim in enumerate(self.n_derivpoints):
+            K_deriv = self._build_cov_dx2(self.X_ref, self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], index=i)
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
             sum_dims += dim
         K_MN = K_MN.T
@@ -112,14 +113,19 @@ class sparseGPR_ND:
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        ref_vectors = self.kernel.eval_func(self.X_ref,X)
+        ref_vectors = self._build_cov_func(self.X_ref, X)
 
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
 
+        print(f"ref_vec_PPA: {ref_vectors.shape}")
+
         if return_std:
-            X_cov = self.kernel.eval_func(X,X)
+            X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
+            print(f"X_cov: {X_cov.shape}")
+
             first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref))*1e-10,k) for k in ref_vectors])
             second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
+            print(f"first_temp: {first_temp.shape}\nsecond_temp: {second_temp.shape}")
             
             # stds = np.sqrt(X_cov + self.noise_var - first_temp + second_temp)
             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
@@ -139,9 +145,11 @@ class sparseGPR_ND:
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        ref_vectors = self.kernel.eval_func(self.X_ref,X)
+        ref_vectors = self._build_cov_func(self.X_ref, X)
 
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
+
+        print(f"ref_vec_SoR: {ref_vectors.shape}")
 
         if return_std:
             vars =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
@@ -162,10 +170,10 @@ class sparseGPR_ND:
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        full_vectors = self._create_covMatrix(X, self.X_data[:self.num_datapoints], self.kernel.eval)
+        full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
         sum_dims = 0
-        for dim in self.n_derivpoints:
-            deriv_vectors = self._create_covMatrix(X, self.X_data[self.num_datapoints + sum_dims:self.n_datapoints + sum_dims + dim], self.kernel.dx2)
+        for i,dim in enumerate(self.n_derivpoints):
+            deriv_vectors = self._build_cov_dx2(X, self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim], index=i)
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=0)
             sum_dims += dim
         full_vectors = full_vectors.T
@@ -173,10 +181,35 @@ class sparseGPR_ND:
         means = full_vectors@self._fit_matrix@self.Y_data
 
         if return_std:
-            X_cov = self.kernel.eval_func(X,X)
-            temp = jnp.array([k.T@self._fit_matrix@k for k in full_vectors])
+            X_cov = self._build_cov_func(X, X)
+            temp = jnp.array([k.T@self._fit_matrix@k for k in full_vectors])          
             stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
 
             return means, stds
 
         return means
+    
+    def _build_cov_func(self, X1, X2):
+        '''
+            X1.shape = (n_samples, n_features)
+            X2.shape = (n_samples, n_features)
+        '''
+        return jnp.array([jnp.apply_along_axis(self.kernel.eval_func,1,X1,x) for x in X2])
+    
+    def _build_cov_dx2(self, X1, X2, index=None):
+        '''
+            X1.shape = (n_samples, n_features)
+            X2.shape = (n_samples, n_features)
+            
+            index ... for which element the gradient is needed
+        '''
+        return jnp.array([jnp.apply_along_axis(self.kernel.eval_dx2, 1, X1, x, index) for x in X2])
+    
+    def _build_cov_ddx1x2(self, X1, X2, index_1=None, index_2=None):
+        '''
+            X1.shape = (n_samples, n_features)
+            X2.shape = (n_samples, n_features)
+
+            index_i ... for elements the partials are needed 
+        '''
+        return jnp.array([jnp.apply_along_axis(self.kernel.eval_ddx1x2,1, X1, x, index_1, index_2) for x in X2])
