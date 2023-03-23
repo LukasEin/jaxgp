@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from ..kernels import RBF
+import time
 
 class sparseGPR:
     def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
@@ -20,7 +21,10 @@ class sparseGPR:
         if X_ref is None:
             raise ValueError("X_ref can't be None!")
         self.X_ref = X_ref
+        # print("Start building K_ref.")
+        # start = time.time()
         self._K_ref = self._build_cov_func(X_ref, X_ref)
+        # print(f"Took {time.time() - start}\nFinished building K_ref")
 
         sparse_methods = ["ppa", "sor", "ny"]
         if sparse_method not in sparse_methods:
@@ -33,6 +37,8 @@ class sparseGPR:
 
         self.X_data = None
         self.Y_data = None
+
+        self.diag_add = 1e-6
 
     def fit(self, X_data, Y_data) -> None:
         '''
@@ -70,6 +76,9 @@ class sparseGPR:
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
         '''
+        # print("Fit PPA/SoR called.")
+        # print("Starting building K_MN.")
+        # start = time.time()
         K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
@@ -77,10 +86,14 @@ class sparseGPR:
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
             sum_dims += dim
         K_MN = K_MN.T
+        # print(f"Took {time.time() - start}\nFinished building K_MN.")
 
         # added small positive diagonal to make the matrix positive definite
-        self._fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref))*1e-10
+        # print("Start building fit_matrix and fit_vector.")
+        # start = time.time()
+        self._fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
         self._fit_vector = K_MN@self.Y_data
+        # print(f"Took {time.time() - start}\nFinished building fit_matrix and fit_vector.")
 
     def _fit_nystrom(self) -> None:
         '''
@@ -98,7 +111,7 @@ class sparseGPR:
         K_MN = K_MN.T
 
         # added small positive diagonal to make the matrix positive definite
-        temp = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref))*1e-10
+        temp = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
         self._fit_matrix = (jnp.eye(len(self.X_data)) - K_MN.T@solve(temp,K_MN)) / self.noise_var
 
     def _predict_PPA(self, X, return_std=False):
@@ -107,20 +120,33 @@ class sparseGPR:
 
             X.shape = (N, n_features)
         '''
+        # print("Predict PPA called")
         if self._fit_matrix is None or self._fit_vector is None:
             raise ValueError("GPR not correctly fitted!")
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
+        # print("Start building ref_vectors")
+        # start = time.time()
         ref_vectors = self._build_cov_func(self.X_ref, X)
+        # print(f"Took {time.time() - start}\nFinished building ref_vectors")
 
+        # print("Start building means.")
+        # start = time.time()
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
+        # print(f"Took {time.time() - start}\nFinished building means.")
 
         if return_std:
+            # print("Start building X_cov.")
+            # start = time.time()
             X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
+            # print(f"Took {time.time() - start}\nFinished building X_cov.")
 
-            first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref))*1e-10,k) for k in ref_vectors])
+            # print("Start building temps.")
+            # start = time.time()
+            first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add,k) for k in ref_vectors])
             second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
+            # print(f"Took {time.time() - start}\nFinished building temps.")
             
             # stds = np.sqrt(X_cov + self.noise_var - first_temp + second_temp)
             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance

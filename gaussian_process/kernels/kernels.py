@@ -1,4 +1,4 @@
-from jax import grad, jacrev
+from jax import grad, jacrev, jacfwd
 import jax.numpy as jnp
 
 class RBF:
@@ -10,8 +10,8 @@ class RBF:
         self.length_scale = length_scale
         self.coeff = coeff
         
-        self._df = grad(self.eval_func, argnums=1)
-        self._ddf = jacrev(self._df)
+        self._df = jacrev(self.eval_func, argnums=1)
+        self._ddf = jacfwd(self._df)
     
     def eval_func(self, x1, x2):
         '''
@@ -32,13 +32,13 @@ class RBF:
             x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
 
-            0 >= index (int) < n_features if given
-                if None the full Hessian is returned 
+            0 >= index (int) < n_features
+                error if not given
         '''
         if index is None:
-            return self._df(x1, x2)
+            raise ValueError("Index missing!")
         
-        return self._df(x1,x2)[index]
+        return self._df(x1, x2)[index]
     
     def eval_ddx1x2(self, x1, x2, index_1 = None, index_2 = None):
         '''
@@ -51,13 +51,50 @@ class RBF:
                 if both are None the full Jacobian is returned 
                 if only one is None the corresponding row/colums is returned
         '''
-        if index_1 is not None and index_2 is not None:
-            return self._ddf(x1, x2)[index_1, index_2]
+        if index_1 is None or index_2 is None:
+            raise ValueError("Indices missing!")
         
-        if index_1 is None:
-            return self._ddf(x1, x2)[:, index_2]
+        return self._ddf(x1, x2)[index_1, index_2]
+    
+class Linear:
+    def __init__(self, offset=0.0):
+        self.offset = offset
+
+        self._df = jacrev(self.eval_func, argnums=1)
+        self._ddf = jacfwd(self._df)
+
+    def eval_func(self, x1, x2):
+        '''
+            returns Linear(x1, x2)
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
+        '''
+        return jnp.inner(x1, x2) + self.offset
+    
+    def eval_dx2(self, x1, x2, index=None):
+        '''
+            returns d/dx1 Linear(x1, x2)
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
+
+            0 >= index (int) < n_features
+                error if not given
+        '''
+        if index is None:
+            raise ValueError("Index missing!")
         
-        if index_2 is None:
-            return self._ddf(x1, x2)[index_1]
+        return self._df(x1, x2)[index]
+    
+    def eval_ddx1x2(self, x1, x2, index_1 = None, index_2 = None):
+        '''
+            returns dd/dx1dx2 Linear(x1, x2)
+            x1.shape = (n_features,)
+            x2.shape = (n_features,)
+            
+            0 >= index_i (int) < n_features
+                error if not both given
+        '''
+        if index_1 is None or index_2 is None:
+            raise ValueError("Indices missing!")
         
-        return self._ddf(x1, x2)
+        return self._ddf(x1, x2)[index_1, index_2]

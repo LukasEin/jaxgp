@@ -1,1 +1,1 @@
-from .kernels import RBF
+from .kernels import RBF, Linear
