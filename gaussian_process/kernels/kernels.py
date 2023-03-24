@@ -1,5 +1,6 @@
-from jax import grad, jacrev, jacfwd
+from jax import grad, jacrev, jacfwd, vmap
 import jax.numpy as jnp
+from functools import partial
 
 class RBF:
     def __init__(self,length_scale=1.0,coeff=1.0):
@@ -21,11 +22,9 @@ class RBF:
             length_scale.shape = (n_features,) or scalar
         '''
         diff = (x1 - x2) / self.length_scale
-
-
         return self.coeff * jnp.exp(-0.5 * jnp.dot(diff, diff))
     
-    def eval_dx2(self, x1, x2, index=None):
+    def eval_dx2(self, x1, x2, index):
         '''
             returns d/dx1 RBF(x1, x2)
             x1.shape = (n_features,)
@@ -35,12 +34,12 @@ class RBF:
             0 >= index (int) < n_features
                 error if not given
         '''
-        if index is None:
-            raise ValueError("Index missing!")
+        # if index is None:
+        #     raise ValueError("Index missing!")
         
         return self._df(x1, x2)[index]
     
-    def eval_ddx1x2(self, x1, x2, index_1 = None, index_2 = None):
+    def eval_ddx1x2(self, x1, x2, index_1, index_2):
         '''
             returns dd/dx1dx2 RBF(x1, x2)
             x1.shape = (n_features,)
@@ -51,8 +50,8 @@ class RBF:
                 if both are None the full Jacobian is returned 
                 if only one is None the corresponding row/colums is returned
         '''
-        if index_1 is None or index_2 is None:
-            raise ValueError("Indices missing!")
+        # if index_1 is None or index_2 is None:
+        #     raise ValueError("Indices missing!")
         
         return self._ddf(x1, x2)[index_1, index_2]
     

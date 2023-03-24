@@ -1,10 +1,12 @@
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from ..kernels import RBF
+from jax import jit, vmap
+from functools import partial
 # import time
 
 class GaussianProcessRegressor:
-    def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="full", noise_var=1e-6) -> None:
+    def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=jnp.zeros(0), *, sparse_method="full", noise_var=1e-6) -> None:
         '''
             supported kernels are found in the gaussion_process_regression.kernels folder
 
@@ -25,6 +27,7 @@ class GaussianProcessRegressor:
             self.X_ref = X_ref
             # print("Start building K_ref.")
             # start = time.time()
+            print(self.X_ref.shape)
             self._K_ref = self._build_cov_func(X_ref, X_ref)
             # print(f"Took {time.time() - start}\nFinished building K_ref")
 
@@ -91,7 +94,11 @@ class GaussianProcessRegressor:
         K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
-            K_deriv = self._build_cov_dx2(self.X_ref, self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], index=i)
+            K_deriv = self._build_cov_dx2(
+                    self.X_ref, 
+                    self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
+                    index=i
+            )
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
             sum_dims += dim
         K_MN = K_MN.T
@@ -115,17 +122,28 @@ class GaussianProcessRegressor:
         K_NN = self._build_cov_func(self.X_data[:self.n_datapoints],self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
-            K_mix = self._build_cov_dx2(self.X_data[:self.n_datapoints],self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], i)
+            K_mix = self._build_cov_dx2(
+                self.X_data[:self.n_datapoints],
+                self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
+                index=i
+            )
             K_NN = jnp.concatenate((K_NN,K_mix),axis=0)
             sum_dims += dim
 
         sum_dims_1 = 0
         sum_dims_2 = 0
         for i,dim_1 in enumerate(self.n_derivpoints):
-            K_mix = self._build_cov_dx2(self.X_data[:self.n_datapoints],self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1], i).T
+            K_mix = self._build_cov_dx2(
+                    self.X_data[:self.n_datapoints],
+                    self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
+                    index=i
+                ).T
             for j,dim_2 in enumerate(self.n_derivpoints):
-                K_derivs = self._build_cov_ddx1x2(self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
-                                                  self.X_data[self.n_datapoints+sum_dims_2:self.n_datapoints+sum_dims_2+dim_2], i, j).T
+                K_derivs = self._build_cov_ddx1x2(
+                        self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
+                        self.X_data[self.n_datapoints+sum_dims_2:self.n_datapoints+sum_dims_2+dim_2],
+                        index_1=i, index_2=j
+                    ).T
                 K_mix = jnp.concatenate((K_mix,K_derivs),axis=0)
                 sum_dims_2 += dim_2
             K_NN = jnp.concatenate((K_NN,K_mix),axis=1)
@@ -134,7 +152,6 @@ class GaussianProcessRegressor:
 
         self._fit_matrix = jnp.eye(len(self.X_data)) * (self.noise_var + self.diag_add) + K_NN
     
-
     def _fit_Ny(self) -> None:
         '''
             Fits the GPR based on the Nystroem Method
@@ -145,7 +162,11 @@ class GaussianProcessRegressor:
         K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
-            K_deriv = self._build_cov_dx2(self.X_ref, self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], index=i)
+            K_deriv = self._build_cov_dx2(
+                    self.X_ref, 
+                    self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
+                    index=i
+                )
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
             sum_dims += dim
         K_MN = K_MN.T
@@ -232,7 +253,11 @@ class GaussianProcessRegressor:
         full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
-            deriv_vectors = self._build_cov_dx2(X, self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim], index=i)
+            deriv_vectors = self._build_cov_dx2(
+                    X, 
+                    self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim],
+                    index=i
+                )
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=0)
             sum_dims += dim
         full_vectors = full_vectors.T
@@ -252,10 +277,15 @@ class GaussianProcessRegressor:
         if self._fit_matrix is None or self.Y_data is None:
             raise ValueError("GPR not correctly fitted!")
         
-        full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
+        # full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
+        full_vectors = self.kernel.eval_func(X, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
-            deriv_vectors = self._build_cov_dx2(X, self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim], index=i)
+            deriv_vectors = self._build_cov_dx2(
+                    X, 
+                    self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim],
+                    index=i
+                )
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=0)
             sum_dims += dim
         full_vectors = full_vectors.T
@@ -273,27 +303,38 @@ class GaussianProcessRegressor:
 
         return means
     
+    # @jit
+    @partial(vmap, in_axes=(None,0,None))
+    @partial(vmap, in_axes=(None,None,0))
     def _build_cov_func(self, X1, X2):
         '''
             X1.shape = (n_samples, n_features)
             X2.shape = (n_samples, n_features)
         '''
-        return jnp.array([jnp.apply_along_axis(self.kernel.eval_func,1, X1, x) for x in X2])
+        return self.kernel.eval_func(X1, X2)
     
-    def _build_cov_dx2(self, X1, X2, index=None):
+    # @jit
+    @partial(vmap, in_axes=(None,0,None,None))
+    @partial(vmap, in_axes=(None,None,0,None))
+    def _build_cov_dx2(self, X1, X2, index):
         '''
             X1.shape = (n_samples, n_features)
             X2.shape = (n_samples, n_features)
             
             index ... for which element the gradient is needed
         '''
+        return self.kernel.eval_dx2(X1,X2, index)
         return jnp.array([jnp.apply_along_axis(self.kernel.eval_dx2, 1, X1, x, index) for x in X2])
     
-    def _build_cov_ddx1x2(self, X1, X2, index_1=None, index_2=None):
+    # @jit
+    @partial(vmap, in_axes=(None,0,None,None,None))
+    @partial(vmap, in_axes=(None,None,0,None,None))
+    def _build_cov_ddx1x2(self, X1, X2, index_1, index_2):
         '''
             X1.shape = (n_samples, n_features)
             X2.shape = (n_samples, n_features)
 
             index_i ... for elements the partials are needed 
         '''
+        return self.kernel.eval_ddx1x2(X1, X2, index_1, index_2)
         return jnp.array([jnp.apply_along_axis(self.kernel.eval_ddx1x2,1, X1, x, index_1, index_2) for x in X2])
