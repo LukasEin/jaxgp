@@ -1,1 +1,2 @@
-from .sparseGPR import sparseGPR
+from .GPR import GaussianProcessRegressor
+from .bootstrapping import Bootstrapper

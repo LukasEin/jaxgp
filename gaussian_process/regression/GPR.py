@@ -1,10 +1,10 @@
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from ..kernels import RBF
-import time
+# import time
 
-class sparseGPR:
-    def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="ppa", noise_var=1e-6) -> None:
+class GaussianProcessRegressor:
+    def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=None, *, sparse_method="full", noise_var=1e-6) -> None:
         '''
             supported kernels are found in the gaussion_process_regression.kernels folder
 
@@ -15,20 +15,23 @@ class sparseGPR:
 
         self.n_datapoints = n_datapoints
         self.n_derivpoints = n_derivpoints
-        self.n_referencepoints = len(X_ref)
 
-        # X_ref must be given for now!!!!!
-        if X_ref is None:
-            raise ValueError("X_ref can't be None!")
-        self.X_ref = X_ref
-        # print("Start building K_ref.")
-        # start = time.time()
-        self._K_ref = self._build_cov_func(X_ref, X_ref)
-        # print(f"Took {time.time() - start}\nFinished building K_ref")
+        if sparse_method != "full":
+            self.n_referencepoints = len(X_ref)
 
-        sparse_methods = ["ppa", "sor", "ny"]
-        if sparse_method not in sparse_methods:
-            raise ValueError("Unrecognized sparsification method chosen!")
+            # X_ref must be given for now!!!!!
+            if X_ref is None:
+                raise ValueError("X_ref can't be None!")
+            self.X_ref = X_ref
+            # print("Start building K_ref.")
+            # start = time.time()
+            self._K_ref = self._build_cov_func(X_ref, X_ref)
+            # print(f"Took {time.time() - start}\nFinished building K_ref")
+
+            sparse_methods = ["ppa", "sor", "ny"]
+            if sparse_method not in sparse_methods:
+                raise ValueError("Unrecognized sparsification method chosen!")
+        
         self.sparse_method = sparse_method
 
         self.noise_var = noise_var
@@ -39,6 +42,8 @@ class sparseGPR:
         self.Y_data = None
 
         self.diag_add = 1e-6
+
+        self.full_vectors = None
 
     def fit(self, X_data, Y_data) -> None:
         '''
@@ -51,7 +56,9 @@ class sparseGPR:
         if self.sparse_method == "ppa" or self.sparse_method == "sor":
             self._fit_PPA_SoR()
         elif self.sparse_method == "ny":
-            self._fit_nystrom()
+            self._fit_Ny()
+        elif self.sparse_method == "full":
+            self._fit_Full()
         else:
             raise ValueError("Unrecognized sprasification method chosen")
 
@@ -60,11 +67,13 @@ class sparseGPR:
             X.shape = (N, n_features)
         '''
         if self.sparse_method == "ppa":
-            return self._predict_PPA(X,return_std)
+            return self._predict_PPA(X, return_std)
         elif self.sparse_method == "sor":
-            return self._predict_SoR(X,return_std)
+            return self._predict_SoR(X, return_std)
         elif self.sparse_method == "ny":
-            return self._predict_Ny(X,return_std)
+            return self._predict_Ny(X, return_std)
+        elif self.sparse_method == "full":
+            return self._predict_Full(X, return_std)
         
         raise ValueError("Unrecognized sprasification method chosen")
     
@@ -95,7 +104,38 @@ class sparseGPR:
         self._fit_vector = K_MN@self.Y_data
         # print(f"Took {time.time() - start}\nFinished building fit_matrix and fit_vector.")
 
-    def _fit_nystrom(self) -> None:
+    def _fit_Full(self) -> None:
+        '''
+            Fits the full GPR Model
+
+            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
+            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+        '''
+        
+        K_NN = self._build_cov_func(self.X_data[:self.n_datapoints],self.X_data[:self.n_datapoints])
+        sum_dims = 0
+        for i,dim in enumerate(self.n_derivpoints):
+            K_mix = self._build_cov_dx2(self.X_data[:self.n_datapoints],self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim], i)
+            K_NN = jnp.concatenate((K_NN,K_mix),axis=0)
+            sum_dims += dim
+
+        sum_dims_1 = 0
+        sum_dims_2 = 0
+        for i,dim_1 in enumerate(self.n_derivpoints):
+            K_mix = self._build_cov_dx2(self.X_data[:self.n_datapoints],self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1], i).T
+            for j,dim_2 in enumerate(self.n_derivpoints):
+                K_derivs = self._build_cov_ddx1x2(self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
+                                                  self.X_data[self.n_datapoints+sum_dims_2:self.n_datapoints+sum_dims_2+dim_2], i, j).T
+                K_mix = jnp.concatenate((K_mix,K_derivs),axis=0)
+                sum_dims_2 += dim_2
+            K_NN = jnp.concatenate((K_NN,K_mix),axis=1)
+            sum_dims_1 += dim_1
+            sum_dims_2 = 0
+
+        self._fit_matrix = jnp.eye(len(self.X_data)) * (self.noise_var + self.diag_add) + K_NN
+    
+
+    def _fit_Ny(self) -> None:
         '''
             Fits the GPR based on the Nystroem Method
 
@@ -184,7 +224,7 @@ class sparseGPR:
             
             X.shape = (N, n_features)
         '''
-        if self._fit_matrix is None:
+        if self._fit_matrix is None or self.Y_data is None:
             raise ValueError("GPR not correctly fitted!")
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
@@ -207,13 +247,38 @@ class sparseGPR:
             return means, stds
 
         return means
+
+    def _predict_Full(self, X, return_std=False):
+        if self._fit_matrix is None or self.Y_data is None:
+            raise ValueError("GPR not correctly fitted!")
+        
+        full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
+        sum_dims = 0
+        for i,dim in enumerate(self.n_derivpoints):
+            deriv_vectors = self._build_cov_dx2(X, self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim], index=i)
+            full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=0)
+            sum_dims += dim
+        full_vectors = full_vectors.T
+
+        self.full_vectors = full_vectors
+
+        means = full_vectors@solve(self._fit_matrix,self.Y_data)
+
+        if return_std:
+            X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
+            temp = jnp.array([k.T@solve(self._fit_matrix,k) for k in full_vectors])          
+            stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
+
+            return means, stds
+
+        return means
     
     def _build_cov_func(self, X1, X2):
         '''
             X1.shape = (n_samples, n_features)
             X2.shape = (n_samples, n_features)
         '''
-        return jnp.array([jnp.apply_along_axis(self.kernel.eval_func,1,X1,x) for x in X2])
+        return jnp.array([jnp.apply_along_axis(self.kernel.eval_func,1, X1, x) for x in X2])
     
     def _build_cov_dx2(self, X1, X2, index=None):
         '''
