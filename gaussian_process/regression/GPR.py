@@ -3,7 +3,7 @@ from jax.scipy.linalg import solve
 from ..kernels import RBF
 from jax import jit, vmap
 from functools import partial
-# import time
+import time
 
 class GaussianProcessRegressor:
     def __init__(self, kernel=RBF(), n_datapoints=0, n_derivpoints=(0,), X_ref=jnp.zeros(0), *, sparse_method="full", noise_var=1e-6) -> None:
@@ -27,7 +27,6 @@ class GaussianProcessRegressor:
             self.X_ref = X_ref
             # print("Start building K_ref.")
             # start = time.time()
-            print(self.X_ref.shape)
             self._K_ref = self._build_cov_func(X_ref, X_ref)
             # print(f"Took {time.time() - start}\nFinished building K_ref")
 
@@ -88,9 +87,9 @@ class GaussianProcessRegressor:
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
         '''
-        # print("Fit PPA/SoR called.")
-        # print("Starting building K_MN.")
-        # start = time.time()
+        print("Fit PPA/SoR called.")
+        print("Starting building K_MN.")
+        start = time.time()
         K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
@@ -99,17 +98,16 @@ class GaussianProcessRegressor:
                     self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
                     index=i
             )
-            K_MN = jnp.concatenate((K_MN,K_deriv),axis=0)
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
             sum_dims += dim
-        K_MN = K_MN.T
-        # print(f"Took {time.time() - start}\nFinished building K_MN.")
+        print(f"Took {time.time() - start}\nFinished building K_MN.")
 
         # added small positive diagonal to make the matrix positive definite
-        # print("Start building fit_matrix and fit_vector.")
-        # start = time.time()
+        print("Start building fit_matrix and fit_vector.")
+        start = time.time()
         self._fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
         self._fit_vector = K_MN@self.Y_data
-        # print(f"Took {time.time() - start}\nFinished building fit_matrix and fit_vector.")
+        print(f"Took {time.time() - start}\nFinished building fit_matrix and fit_vector.")
 
     def _fit_Full(self) -> None:
         '''
@@ -127,9 +125,9 @@ class GaussianProcessRegressor:
                 self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
                 index=i
             )
-            K_NN = jnp.concatenate((K_NN,K_mix),axis=0)
+            K_NN = jnp.concatenate((K_NN,K_mix),axis=1)
             sum_dims += dim
-
+        
         sum_dims_1 = 0
         sum_dims_2 = 0
         for i,dim_1 in enumerate(self.n_derivpoints):
@@ -137,16 +135,16 @@ class GaussianProcessRegressor:
                     self.X_data[:self.n_datapoints],
                     self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
                     index=i
-                ).T
+                )
             for j,dim_2 in enumerate(self.n_derivpoints):
                 K_derivs = self._build_cov_ddx1x2(
                         self.X_data[self.n_datapoints+sum_dims_1:self.n_datapoints+sum_dims_1+dim_1],
                         self.X_data[self.n_datapoints+sum_dims_2:self.n_datapoints+sum_dims_2+dim_2],
                         index_1=i, index_2=j
-                    ).T
+                    )
                 K_mix = jnp.concatenate((K_mix,K_derivs),axis=0)
                 sum_dims_2 += dim_2
-            K_NN = jnp.concatenate((K_NN,K_mix),axis=1)
+            K_NN = jnp.concatenate((K_NN,K_mix.T),axis=0)
             sum_dims_1 += dim_1
             sum_dims_2 = 0
 
@@ -181,33 +179,41 @@ class GaussianProcessRegressor:
 
             X.shape = (N, n_features)
         '''
-        # print("Predict PPA called")
+        print("Predict PPA called")
         if self._fit_matrix is None or self._fit_vector is None:
             raise ValueError("GPR not correctly fitted!")
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        # print("Start building ref_vectors")
-        # start = time.time()
-        ref_vectors = self._build_cov_func(self.X_ref, X)
-        # print(f"Took {time.time() - start}\nFinished building ref_vectors")
+        print("Start building ref_vectors")
+        start = time.time()
+        ref_vectors = self._build_cov_func(self.X_ref, X).T
+        print(f"Took {time.time() - start}\nFinished building ref_vectors")
 
-        # print("Start building means.")
-        # start = time.time()
+        print("Start building means.")
+        start = time.time()
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
-        # print(f"Took {time.time() - start}\nFinished building means.")
+        print(f"Took {time.time() - start}\nFinished building means.")
 
         if return_std:
-            # print("Start building X_cov.")
-            # start = time.time()
-            X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
-            # print(f"Took {time.time() - start}\nFinished building X_cov.")
+            print("Start building X_cov.")
+            start = time.time()
+            solver = lambda x: self.kernel.eval_func(x, x)
+            solver = vmap(solver, in_axes=0)
+            # X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
+            X_cov = solver(X)
+            print(f"Took {time.time() - start}\nFinished building X_cov.")
 
-            # print("Start building temps.")
-            # start = time.time()
-            first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add,k) for k in ref_vectors])
-            second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
-            # print(f"Took {time.time() - start}\nFinished building temps.")
+            print("Start building temps.")
+            start = time.time()
+            solver = lambda A,x: x@solve(A,x)
+            solver = vmap(solver, in_axes=(None,0))
+            first_temp = solver(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
+            second_temp = solver(self._fit_matrix, ref_vectors)
+            
+            # first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add,k) for k in ref_vectors])
+            # second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
+            print(f"Took {time.time() - start}\nFinished building temps.")
             
             # stds = np.sqrt(X_cov + self.noise_var - first_temp + second_temp)
             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
@@ -227,7 +233,7 @@ class GaussianProcessRegressor:
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        ref_vectors = self._build_cov_func(self.X_ref, X)
+        ref_vectors = self._build_cov_func(self.X_ref, X).T
 
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
 
@@ -277,8 +283,8 @@ class GaussianProcessRegressor:
         if self._fit_matrix is None or self.Y_data is None:
             raise ValueError("GPR not correctly fitted!")
         
-        # full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
-        full_vectors = self.kernel.eval_func(X, self.X_data[:self.n_datapoints])
+        full_vectors = self._build_cov_func(X, self.X_data[:self.n_datapoints])
+        # full_vectors = self.kernel.eval_func(X, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
             deriv_vectors = self._build_cov_dx2(
@@ -286,11 +292,11 @@ class GaussianProcessRegressor:
                     self.X_data[self.n_datapoints + sum_dims:self.n_datapoints + sum_dims + dim],
                     index=i
                 )
-            full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=0)
+            full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
             sum_dims += dim
-        full_vectors = full_vectors.T
+        # full_vectors = full_vectors.T
 
-        self.full_vectors = full_vectors
+        # self.full_vectors = full_vectors
 
         means = full_vectors@solve(self._fit_matrix,self.Y_data)
 
@@ -312,10 +318,9 @@ class GaussianProcessRegressor:
             X2.shape = (n_samples, n_features)
         '''
         return self.kernel.eval_func(X1, X2)
+        # return jnp.array([jnp.apply_along_axis(self.kernel.eval_func, 1, X1, x) for x in X2])
     
     # @jit
-    @partial(vmap, in_axes=(None,0,None,None))
-    @partial(vmap, in_axes=(None,None,0,None))
     def _build_cov_dx2(self, X1, X2, index):
         '''
             X1.shape = (n_samples, n_features)
@@ -323,12 +328,12 @@ class GaussianProcessRegressor:
             
             index ... for which element the gradient is needed
         '''
-        return self.kernel.eval_dx2(X1,X2, index)
-        return jnp.array([jnp.apply_along_axis(self.kernel.eval_dx2, 1, X1, x, index) for x in X2])
+        func = lambda A, B: self.kernel.eval_dx2(A,B, index) 
+        func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
+        return func(X1, X2)
+        # return jnp.array([jnp.apply_along_axis(self.kernel.eval_dx2, 1, X1, x, index) for x in X2])
     
     # @jit
-    @partial(vmap, in_axes=(None,0,None,None,None))
-    @partial(vmap, in_axes=(None,None,0,None,None))
     def _build_cov_ddx1x2(self, X1, X2, index_1, index_2):
         '''
             X1.shape = (n_samples, n_features)
@@ -336,5 +341,7 @@ class GaussianProcessRegressor:
 
             index_i ... for elements the partials are needed 
         '''
-        return self.kernel.eval_ddx1x2(X1, X2, index_1, index_2)
-        return jnp.array([jnp.apply_along_axis(self.kernel.eval_ddx1x2,1, X1, x, index_1, index_2) for x in X2])
+        func = lambda A, B: self.kernel.eval_ddx1x2(A, B, index_1, index_2) 
+        func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
+        return func(X1, X2)
+        # return jnp.array([jnp.apply_along_axis(self.kernel.eval_ddx1x2,1, X1, x, index_1, index_2) for x in X2])
