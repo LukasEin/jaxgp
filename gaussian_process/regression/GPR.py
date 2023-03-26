@@ -87,9 +87,6 @@ class GaussianProcessRegressor:
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
         '''
-        print("Fit PPA/SoR called.")
-        print("Starting building K_MN.")
-        start = time.time()
         K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
         sum_dims = 0
         for i,dim in enumerate(self.n_derivpoints):
@@ -100,14 +97,10 @@ class GaussianProcessRegressor:
             )
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
             sum_dims += dim
-        print(f"Took {time.time() - start}\nFinished building K_MN.")
 
         # added small positive diagonal to make the matrix positive definite
-        print("Start building fit_matrix and fit_vector.")
-        start = time.time()
         self._fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
         self._fit_vector = K_MN@self.Y_data
-        print(f"Took {time.time() - start}\nFinished building fit_matrix and fit_vector.")
 
     def _fit_Full(self) -> None:
         '''
@@ -179,43 +172,24 @@ class GaussianProcessRegressor:
 
             X.shape = (N, n_features)
         '''
-        print("Predict PPA called")
         if self._fit_matrix is None or self._fit_vector is None:
             raise ValueError("GPR not correctly fitted!")
         if self.X_ref is None:
             raise ValueError("X_ref can't be None!")
         
-        print("Start building ref_vectors")
-        start = time.time()
         ref_vectors = self._build_cov_func(self.X_ref, X).T
-        print(f"Took {time.time() - start}\nFinished building ref_vectors")
 
-        print("Start building means.")
-        start = time.time()
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
-        print(f"Took {time.time() - start}\nFinished building means.")
 
         if return_std:
-            print("Start building X_cov.")
-            start = time.time()
-            solver = lambda x: self.kernel.eval_func(x, x)
-            solver = vmap(solver, in_axes=0)
+            X_cov = self._build_cov_vector(X)
             # X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
-            X_cov = solver(X)
-            print(f"Took {time.time() - start}\nFinished building X_cov.")
 
-            print("Start building temps.")
-            start = time.time()
-            solver = lambda A,x: x@solve(A,x)
-            solver = vmap(solver, in_axes=(None,0))
-            first_temp = solver(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
-            second_temp = solver(self._fit_matrix, ref_vectors)
-            
+            first_temp = self._build_xTAx(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
+            second_temp = self.noise_var * self._build_xTAx(self._fit_matrix, ref_vectors)
             # first_temp = jnp.array([k.T@solve(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add,k) for k in ref_vectors])
             # second_temp =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
-            print(f"Took {time.time() - start}\nFinished building temps.")
             
-            # stds = np.sqrt(X_cov + self.noise_var - first_temp + second_temp)
             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
             
             return means, stds
@@ -224,7 +198,7 @@ class GaussianProcessRegressor:
 
     def _predict_SoR(self, X, return_std=False):
         '''
-            Calculates the posterior means and standard deviations for the Subset of Regressors
+            Calculates the posterior means and standard deviations for the Subset of Regressors Aprroximation
             
             X.shape = (N, n_features)
         '''
@@ -238,7 +212,8 @@ class GaussianProcessRegressor:
         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
 
         if return_std:
-            vars =  self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
+            vars = self.noise_var * self._build_xTAx(self._fit_matrix, ref_vectors)
+            # vars = self.noise_var * jnp.array([k.T@solve(self._fit_matrix,k) for k in ref_vectors])
             stds = jnp.sqrt(vars)
 
             return means, stds
@@ -271,8 +246,9 @@ class GaussianProcessRegressor:
         means = full_vectors@self._fit_matrix@self.Y_data
 
         if return_std:
-            X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
-            temp = jnp.array([k.T@self._fit_matrix@k for k in full_vectors])          
+            X_cov = self._build_cov_vector(X)
+            # X_cov = jnp.array([self.kernel.eval_func(x, x) for x in X])
+            temp = jnp.array([k.T@self._fit_matrix@k for k in full_vectors])       
             stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
 
             return means, stds
@@ -309,13 +285,42 @@ class GaussianProcessRegressor:
 
         return means
     
+    @partial(vmap, in_axes=(None, None, 0))
+    def _build_xTAx(self, A, X):
+        '''
+            X.shape = (N,M)
+            A.shape = (M,M)
+
+            output.shape = (N,)
+
+            Calculates x.T@A^-1@x for each of the N x in X (x.shape = (M,)).
+        '''
+        return X.T@solve(A,X)
+    
+    @partial(vmap, in_axes=(None,0))
+    def _build_cov_vector(self, X):
+        '''
+            X1.shape = (N, n_features)
+
+            output.shape = (N,)
+
+            Builds a vector of the covariance of all X[:,i] with them selves.
+        '''
+        return self.kernel.eval_func(X, X)
+
     # @jit
     @partial(vmap, in_axes=(None,0,None))
     @partial(vmap, in_axes=(None,None,0))
     def _build_cov_func(self, X1, X2):
         '''
-            X1.shape = (n_samples, n_features)
-            X2.shape = (n_samples, n_features)
+            X1.shape = (N1, n_features)
+            X2.shape = (N2, n_features)
+
+            output.shape = (N1, N2)
+
+            Builds the covariance matrix between the elements of X1 and X2
+            based on inputs representing values of the target function.
+
         '''
         return self.kernel.eval_func(X1, X2)
         # return jnp.array([jnp.apply_along_axis(self.kernel.eval_func, 1, X1, x) for x in X2])
@@ -323,10 +328,17 @@ class GaussianProcessRegressor:
     # @jit
     def _build_cov_dx2(self, X1, X2, index):
         '''
-            X1.shape = (n_samples, n_features)
-            X2.shape = (n_samples, n_features)
+            X1.shape = (N1, n_features)
+            X2.shape = (N2, n_features)
             
-            index ... for which element the gradient is needed
+            index in range(0, n_features - 1), derivative of the kernel
+                is taken w.r.t. to X_2[:,index].
+
+            output.shape = (N1, N2)
+
+            Builds the covariance matrix between the elements of X1 and X2
+            based on X1 representing values of the target function and X2
+            representing derivative values of the target function.
         '''
         func = lambda A, B: self.kernel.eval_dx2(A,B, index) 
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
@@ -336,10 +348,17 @@ class GaussianProcessRegressor:
     # @jit
     def _build_cov_ddx1x2(self, X1, X2, index_1, index_2):
         '''
-            X1.shape = (n_samples, n_features)
-            X2.shape = (n_samples, n_features)
+            X1.shape = (N1, n_features)
+            X2.shape = (N2, n_features)
+            
+            index_i in range(0, n_features - 1), double derivative of the 
+                kernel is taken w.r.t. to X1[:,index_1] and X2[:,index_2].
 
-            index_i ... for elements the partials are needed 
+            output.shape = (N1, N2)
+
+            Builds the covariance matrix between the elements of X1 and X2
+            based on X1 and X2 representing derivative values of the target 
+            function.
         '''
         func = lambda A, B: self.kernel.eval_ddx1x2(A, B, index_1, index_2) 
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
