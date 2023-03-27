@@ -28,10 +28,6 @@ class BaseGPR:
         # additional small diagonal element added to all matrices 
         # that are going to be inverted for numerical stability
         self.diag_add = 1e-6
-
-    def __call__(self, X_data, Y_data):
-        self.X_data = X_data
-        self.Y_data = Y_data
             
     def fit(self, X_data, Y_data):
         raise NotImplementedError("Fit function was not implemented in derived GP Regressor.")
@@ -39,6 +35,7 @@ class BaseGPR:
     def predict(self, X):
         raise NotImplementedError("Predict function was not implemented in derived GP Regressor.")
 
+    @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None, None, 0))
     def _build_xTAx(self, A: jnp.DeviceArray, X:jnp.DeviceArray):
         '''
@@ -51,6 +48,7 @@ class BaseGPR:
         '''
         return X.T@solve(A,X)
     
+    @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None,0))
     def _build_cov_vector(self, X: jnp.DeviceArray):
         '''
@@ -62,7 +60,7 @@ class BaseGPR:
         '''
         return self.kernel.eval_func(X, X)
 
-    # @jit
+    @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None,0,None))
     @partial(vmap, in_axes=(None,None,0))
     def _build_cov_func(self, X1: jnp.DeviceArray, X2: jnp.DeviceArray):
@@ -74,12 +72,11 @@ class BaseGPR:
 
             Builds the covariance matrix between the elements of X1 and X2
             based on inputs representing values of the target function.
-
         '''
         return self.kernel.eval_func(X1, X2)
         # return jnp.array([jnp.apply_along_axis(self.kernel.eval_func, 1, X1, x) for x in X2])
     
-    # @jit
+    @partial(jit, static_argnums=(0,))
     def _build_cov_dx2(self, X1: jnp.DeviceArray, X2: jnp.DeviceArray, index: int):
         '''
             X1.shape = (N1, n_features)
@@ -99,7 +96,7 @@ class BaseGPR:
         return func(X1, X2)
         # return jnp.array([jnp.apply_along_axis(self.kernel.eval_dx2, 1, X1, x, index) for x in X2])
     
-    # @jit
+    @partial(jit, static_argnums=(0,))
     def _build_cov_ddx1x2(self, X1: jnp.DeviceArray, X2: jnp.DeviceArray, index_1: int, index_2: int):
         '''
             X1.shape = (N1, n_features)
@@ -122,17 +119,9 @@ class BaseGPR:
 class ExactGPR(BaseGPR):
     def __init__(self, kernel = RBF(), n_datapoints: int = 0, n_derivpoints: Iterable = (0, ), noise_var: float = 0.000001) -> None:
         super().__init__(kernel, n_datapoints, n_derivpoints, noise_var)
-    
-    def fit(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray) -> None:
-        '''
-            Fits the full GPR Model
 
-            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
-            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
-        '''
-        self.X_data = X_data
-        self.Y_data = Y_data
-
+    # @partial(jit, static_argnums=(0,))
+    def forward(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray):
         # Build the full covariance Matrix between all datapoints in X_data depending on if they   
         # represent function evaluations or derivative evaluations
         K_NN = self._build_cov_func(X_data[:self.n_datapoints],X_data[:self.n_datapoints])
@@ -166,8 +155,21 @@ class ExactGPR(BaseGPR):
             sum_dims_1 += dim_1
             sum_dims_2 = 0
 
-        self._fit_matrix = jnp.eye(len(self.X_data)) * (self.noise_var + self.diag_add) + K_NN
+        return jnp.eye(len(self.X_data)) * (self.noise_var + self.diag_add) + K_NN
+    
+    def fit(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray) -> None:
+        '''
+            Fits the full GPR Model
 
+            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
+            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+        '''
+        self.X_data = X_data
+        self.Y_data = Y_data
+
+        self._fit_matrix = self.forward(X_data, Y_data)
+
+    # @partial(jit, static_argnums=(0,))
     def predict(self, X: jnp.DeviceArray, return_std: bool = False):
         if self._fit_matrix is None or self.Y_data is None:
             raise ValueError("GPR not correctly fitted!")
@@ -206,6 +208,25 @@ class ApproximateGPR(BaseGPR):
         self.X_ref = X_ref
         self._K_ref = self._build_cov_func(X_ref, X_ref)
 
+    # @partial(jit, static_argnums=(0,))
+    def forward(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray):
+        K_MN = self._build_cov_func(self.X_ref, X_data[:self.n_datapoints])
+        sum_dims = 0
+        for i,dim in enumerate(self.n_derivpoints):
+            K_deriv = self._build_cov_dx2(
+                    self.X_ref, 
+                    X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
+                    index=i
+            )
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+            sum_dims += dim
+            
+        # added small positive diagonal to make the matrix positive definite
+        fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
+        fit_vector = K_MN@self.Y_data
+        
+        return fit_matrix, fit_vector
+
     def fit(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray):
         '''
             Fits the GPR based on the Projected Process Approximation
@@ -216,21 +237,9 @@ class ApproximateGPR(BaseGPR):
         self.X_data = X_data
         self.Y_data = Y_data
 
-        K_MN = self._build_cov_func(self.X_ref, self.X_data[:self.n_datapoints])
-        sum_dims = 0
-        for i,dim in enumerate(self.n_derivpoints):
-            K_deriv = self._build_cov_dx2(
-                    self.X_ref, 
-                    self.X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
-                    index=i
-            )
-            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
-            sum_dims += dim
+        self._fit_matrix, self._fit_vector = self.forward(X_data, Y_data)
 
-        # added small positive diagonal to make the matrix positive definite
-        self._fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
-        self._fit_vector = K_MN@self.Y_data
-
+    # @partial(jit, static_argnums=(0,))
     def predict(self, X: jnp.DeviceArray, return_std: bool = False):
         '''
             Calculates the posterior means and standard deviations for the Projected Process Approximation
