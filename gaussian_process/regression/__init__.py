@@ -1,2 +1,2 @@
-from .GPR import GaussianProcessRegressor
+from .GPR import ExactGPR, ApproximateGPR, BaseGPR
 from .bootstrapping import Bootstrapper
