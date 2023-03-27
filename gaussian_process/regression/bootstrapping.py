@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from jax import random
 from ..kernels import RBF
-from .GPR import GaussianProcessRegressor
+from .GPR import ExactGPR
 
 class Bootstrapper:
     def __init__(self, X_data, Y_data, data_split, X_predict, noise_var=1e-6, kernel=RBF(), batches=None, n_runs=1, seed=0):
@@ -32,7 +32,7 @@ class Bootstrapper:
     def run(self):
         self._split_indices()
 
-        model = GaussianProcessRegressor(self.kernel, self.data_partials[0], self.data_partials[1:], noise_var=self.noise_var)
+        model = ExactGPR(self.kernel, self.data_partials[0], self.data_partials[1:], noise_var=self.noise_var)
 
         key = random.PRNGKey(self.seed)
 
