@@ -4,8 +4,8 @@ from functools import partial
 
 class BaseKernel:
     def __init__(self) -> None:
-        self._df = jacrev(self.eval_func, argnums=2)
-        self._ddf = jacfwd(self._df, argnums=1)
+        self._df = jacrev(self.eval_func, argnums=1)
+        self._ddf = jacfwd(self._df, argnums=0)
 
     def __add__(self, other):
         return SumKernel(self, other)

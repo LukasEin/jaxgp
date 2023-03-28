@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from jax.scipy.optimize import minimize
 from ..kernels import BaseKernel, RBF
-from jax import jit, vmap
+from jax import jit, vmap, grad
 from functools import partial
 from typing import Iterable, Tuple
 
@@ -24,58 +24,6 @@ class BaseGPR:
         self._fit_vector = None
         self._fit_matrix = None
         self.X_data = None
-            
-    def fit(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray) -> None:
-        '''
-            Fits the GPR Model to the given data
-
-            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
-            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
-
-            Thin wrapper with all side effects around the pure functions 
-            self.optimize and self.forward that do the actual work.
-        '''
-        self.X_data = X_data
-        self.params = self.optimize(self.params, X_data, Y_data, self.data_split)
-        self._fit_matrix, self._fit_vector = self.forward(X_data, Y_data, self.params, self.data_split)
-    
-    def forward(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray, params: Iterable, data_split: Iterable) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
-        raise NotImplementedError("Forward function was not implemented in derived GP Regressor.")
-
-    def predict(self, X: jnp.DeviceArray, return_std: bool = False):
-        '''
-            Predicts the posterior mean (and std if return_std=True) at each point in X
-            X.shape = (N, n_features)
-            
-            Thin wrapper with all side effects around the pure function 
-            self.eval that does the actual work.
-        '''
-        if self._fit_matrix is None or self._fit_vector is None:
-            raise ValueError("GPR not correctly fitted!")
-        
-        return self.eval(X, self.X_data, self.data_split, self._fit_matrix, self._fit_vector, self.params, return_std)
-    
-    def eval(self, X: jnp.DeviceArray, X_data: jnp.DeviceArray, data_split: jnp.DeviceArray, fitmatrix: jnp.DeviceArray, 
-             fitvector: jnp.DeviceArray, params: jnp.DeviceArray, return_std: bool = False) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
-        raise NotImplementedError("Forward function was not implemented in derived GP Regressor.")
-    
-    def negativeLogLikelyhoodEstimate(self, params: jnp.DeviceArray, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray, data_split) -> jnp.float32:
-        fitmatrix, fitvector = self.forward(X_data, Y_data, params, data_split)
-        _, logdet = jnp.linalg.slogdet(fitmatrix)
-        return -0.5*(len(fitvector) * jnp.log(2*jnp.pi) + logdet + fitvector.T@solve(fitmatrix,fitvector))
-
-    def optimize(self, initial_params: jnp.DeviceArray, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray, data_split) -> jnp.DeviceArray:
-        # result = jit(minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data), method="BFGS"))
-        result = minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data, data_split), method="BFGS")
-
-        if result.success:
-            if result.status == 1:
-                print("Max iterations reached!")
-                return result.x
-            if result.status == 0:
-                return result.x
-            
-        raise ValueError("An error occured while maximizing the log likelyhood")
 
     # @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None, None, 0))
@@ -158,16 +106,48 @@ class BaseGPR:
         return func(X1, X2)
 
 class ExactGPR(BaseGPR):
-    def __init__(self, kernel: BaseKernel = RBF(), data_split: Iterable = (0, 0), kernel_params: Iterable = (1.0, 1.0), noise_var: float = 1e-6) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0, 1.0), noise_var=1e-6) -> None:
         super().__init__(kernel, data_split, kernel_params, noise_var)
+    
+    def negativeLogLikelyhoodEstimate(self, params, X_split, Y_data):
+        fitmatrix, fitvector = self.forward(X_split, Y_data, params)
+        _, logdet = jnp.linalg.slogdet(fitmatrix)
+        fitvector = fitvector.reshape(-1)
+        return -0.5*(len(fitvector) * jnp.log(2*jnp.pi) + logdet + fitvector.T@solve(fitmatrix,fitvector))
+
+    def optimize(self, initial_params, X_split, Y_data):
+        # result = jit(minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data, data_split), method="BFGS"))
+        result = minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_split, Y_data), method="BFGS")
+
+        if result.success:
+            if result.status == 1:
+                print("Max iterations reached!")
+                return result.x
+            if result.status == 0:
+                return result.x
+            
+        raise ValueError("An error occured while maximizing the log likelyhood")
+        
+    def fit(self, X_data, Y_data) -> None:
+        '''
+            Fits the GPR Model to the given data
+
+            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
+            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+
+            Thin wrapper with all side effects around the pure functions 
+            self.optimize and self.forward that do the actual work.
+        '''        
+        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
+        self.X_split = jnp.split(X_data, sum_splits)
+
+        # self.params = self.optimize(self.params, X_split, Y_data)
+        self._fit_matrix, self._fit_vector = self.forward(self.X_split, Y_data, self.params)
 
     # @partial(jit, static_argnums=(0,4))
-    def forward(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray, params: Iterable, data_split: Iterable) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
+    def forward(self, X_split, Y_data, params):
         # Build the full covariance Matrix between all datapoints in X_data depending on if they   
         # represent function evaluations or derivative evaluations
-        sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
-        X_split = jnp.split(X_data, sum_splits)
-
         K_NN = self._CovMatrix_Kernel(X_split[0], X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             K_mix = self._CovMatrix_KernelGrad(X_split[0], elem, index=i, params=params[1:])
@@ -184,14 +164,59 @@ class ExactGPR(BaseGPR):
 
         # additional small diagonal element added for 
         # numerical stability of the inversion and determinant
-        return (jnp.eye(len(X_data)) * (params[0] + 1e-6) + K_NN), (Y_data)
+        return (jnp.eye(len(K_NN)) * (params[0] + 1e-6) + K_NN), (Y_data)
+    
+    def predict(self, X, return_std=False):
+        '''
+            Predicts the posterior mean (and std if return_std=True) at each point in X
+            X.shape = (N, n_features)
+            
+            Thin wrapper with all side effects around the pure function 
+            self.eval that does the actual work.
+        '''
+        if self._fit_matrix is None or self._fit_vector is None:
+            raise ValueError("GPR not correctly fitted!")
+        
+        if return_std:
+            return self.eval_mean_std(X, self.X_split, self._fit_matrix, self._fit_vector, self.params)
+        
+        return self.eval_mean(X, self.X_split, self._fit_matrix, self._fit_vector, self.params, return_std)
     
     # @partial(jit, static_argnums=(0,6))
-    def eval(self, X: jnp.DeviceArray, X_data: jnp.DeviceArray, data_split: jnp.DeviceArray, 
-             fitmatrix: jnp.DeviceArray, fitvector: jnp.DeviceArray, params, return_std: bool = False) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
-        sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
-        X_split = jnp.split(X_data, sum_splits)
+    # def eval(self, X, X_data, data_split, 
+    #          fitmatrix, fitvector, params, return_std: bool = False) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
+    #     sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
+    #     X_split = jnp.split(X_data, sum_splits)
         
+    #     full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
+    #     for i,elem in enumerate(X_split[1:]):
+    #         deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
+    #         full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
+
+    #     means = full_vectors@solve(fitmatrix,fitvector)
+
+    #     if return_std:
+    #         X_cov = self._build_cov_vector(X, params[1:])  
+    #         temp = self._build_xTAx(fitmatrix, full_vectors)      
+    #         stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
+
+    #         return means, stds
+
+    #     return means
+    
+    @partial(jit, static_argnums=(0,))
+    def eval_mean(self, X, X_split, fitmatrix, fitvector, params):
+        full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
+        for i,elem in enumerate(X_split[1:]):
+            deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
+            full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
+
+        means = full_vectors@solve(fitmatrix,fitvector)
+        
+        return means
+    
+    @partial(jit, static_argnums=(0,))
+    def eval_mean_std(self, X, X_split, fitmatrix, fitvector, params):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
@@ -199,85 +224,112 @@ class ExactGPR(BaseGPR):
 
         means = full_vectors@solve(fitmatrix,fitvector)
 
-        if return_std:
-            X_cov = self._build_cov_vector(X, params[1:])  
-            temp = self._build_xTAx(fitmatrix, full_vectors)      
-            stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
-
-            return means, stds
-
-        return means
+        X_cov = self._build_cov_vector(X, params[1:])  
+        temp = self._build_xTAx(fitmatrix, full_vectors)      
+        stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
+        
+        return means, stds
 
 class ApproximateGPR(BaseGPR):
-    def __init__(self, kernel =RBF(), n_datapoints: int = 0, n_derivpoints: Iterable = (0, ), X_ref: jnp.DeviceArray=None, noise_var: float = 0.000001) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, ), X_ref=None, kernel_params= (1.0, 1.0), noise_var= 1e-6) -> None:
         '''
             Approximates the full GP regressor by the Projected Process Approximation.
         '''
-        super().__init__(kernel, n_datapoints, n_derivpoints, noise_var)
+        super().__init__(kernel, data_split, kernel_params, noise_var)
 
-        if X_ref is None:
-            raise ValueError("X_ref can't be None!")
         self.X_ref = X_ref
-        self._K_ref = self._build_cov_func(X_ref, X_ref)
+        self._K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=self.params[1:])
+    
+    def LogLikelyhoodEstimate(self, params, X_split, Y_data, X_ref, K_ref):
+        fitmatrix, fitvector = self.forward(X_split, Y_data, X_ref, K_ref, params)
+        _, logdet = jnp.linalg.slogdet(fitmatrix)
+        fitvector = fitvector.reshape(-1)
+        return -0.5*(len(fitvector) * jnp.log(2*jnp.pi) + logdet + fitvector.T@solve(fitmatrix,fitvector))
 
-    # @partial(jit, static_argnums=(0,))
-    def forward(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray):
-        K_MN = self._build_cov_func(self.X_ref, X_data[:self.n_datapoints])
-        sum_dims = 0
-        for i,dim in enumerate(self.n_derivpoints):
-            K_deriv = self._build_cov_dx2(
-                    self.X_ref, 
-                    X_data[self.n_datapoints+sum_dims:self.n_datapoints+sum_dims+dim],
-                    index=i
-            )
-            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
-            sum_dims += dim
+    def optimize(self, initial_params, X_split, Y_data, X_ref, K_ref):
+        # result = jit(minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data, data_split), method="BFGS"))
+        result = minimize(self.LogLikelyhoodEstimate, initial_params, (X_split, Y_data, X_ref, K_ref), method="BFGS")
+
+        print(result)
+
+        if result.success:
+            if result.status == 1:
+                print("Max iterations reached!")
+                return result.x
+            if result.status == 0:
+                return result.x
             
-        # added small positive diagonal to make the matrix positive definite
-        fit_matrix = self.noise_var * self._K_ref + K_MN@K_MN.T + jnp.eye(len(self.X_ref)) * self.diag_add
-        fit_vector = K_MN@self.Y_data
-        
-        return fit_matrix, fit_vector
-
-    def fit(self, X_data: jnp.DeviceArray, Y_data: jnp.DeviceArray):
+        raise ValueError("An error occured while maximizing the log likelyhood")
+   
+    def fit(self, X_data, Y_data) -> None:
         '''
-            Fits the GPR based on the Projected Process Approximation
+            Fits the GPR Model to the given data
 
             X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
             Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+
+            Thin wrapper with all side effects around the pure functions 
+            self.optimize and self.forward that do the actual work.
         '''
         self.X_data = X_data
-        self.Y_data = Y_data
+        
+        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
+        X_split = jnp.split(X_data, sum_splits)
 
-        self._fit_matrix, self._fit_vector = self.forward(X_data, Y_data)
+        # self.params = self.optimize(self.params, X_split, Y_data, self.X_ref, self._K_ref)
+        self._fit_matrix, self._fit_vector = self.forward(X_split, Y_data, self.X_ref, self._K_ref, self.params)
 
-    # @partial(jit, static_argnums=(0,))
-    def predict(self, X: jnp.DeviceArray, return_std: bool = False):
+    @partial(jit, static_argnums=(0,))
+    def forward(self, X_split, Y_data, X_ref, K_ref, params):
+        K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
+        for i,elem in enumerate(X_split[1:]):
+            K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+            
+        # added small positive diagonal to make the matrix positive definite
+        fit_matrix = params[0] * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
+        fit_vector = K_MN@Y_data
+
+        return fit_matrix, fit_vector
+
+    def predict(self, X, return_std=False):
         '''
-            Calculates the posterior means and standard deviations for the Projected Process Approximation
-
+            Predicts the posterior mean (and std if return_std=True) at each point in X
             X.shape = (N, n_features)
+            
+            Thin wrapper with all side effects around the pure function 
+            self.eval that does the actual work.
         '''
         if self._fit_matrix is None or self._fit_vector is None:
             raise ValueError("GPR not correctly fitted!")
-        if self.X_ref is None:
-            raise ValueError("X_ref can't be None!")
         
-        ref_vectors = self._build_cov_func(self.X_ref, X).T
-
-        means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
-
         if return_std:
-            X_cov = self._build_cov_vector(X)
+            return self.eval_mean_std(X, self.X_ref, self._K_ref, self._fit_matrix, self._fit_vector, self.params)
+        
+        return self.eval_mean(X, self.X_ref, self._fit_matrix, self._fit_vector, self.params, return_std)
+    
+    @partial(jit, static_argnums=(0,))
+    def eval_mean(self, X, X_ref, fitmatrix, fitvector, params):
+        ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-            first_temp = self._build_xTAx(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
-            second_temp = self.noise_var * self._build_xTAx(self._fit_matrix, ref_vectors)
-            
-            stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
-            
-            return means, stds
+        means = ref_vectors@solve(fitmatrix,fitvector)
         
         return means
+    
+    @partial(jit, static_argnums=(0,))
+    def eval_mean_std(self, X, X_ref, K_ref, fitmatrix, fitvector, params):
+        ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
+
+        means = ref_vectors@solve(fitmatrix,fitvector)
+
+        X_cov = self._build_cov_vector(X, params[1:])
+
+        first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
+        second_temp = params[0] * self._build_xTAx(fitmatrix, ref_vectors)
+        
+        stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
+        
+        return means, stds
 
 # class BaseGPR:
 #     def __init__(self, kernel = RBF(), n_datapoints: int = 0, n_derivpoints: Iterable = (0, ), noise_var: float = 0.000001) -> None:
@@ -515,31 +567,31 @@ class ApproximateGPR(BaseGPR):
 
 #     # @partial(jit, static_argnums=(0,))
 #     def predict(self, X: jnp.DeviceArray, return_std: bool = False):
-        # '''
-        #     Calculates the posterior means and standard deviations for the Projected Process Approximation
+#         '''
+#             Calculates the posterior means and standard deviations for the Projected Process Approximation
 
-        #     X.shape = (N, n_features)
-        # '''
-        # if self._fit_matrix is None or self._fit_vector is None:
-        #     raise ValueError("GPR not correctly fitted!")
-        # if self.X_ref is None:
-        #     raise ValueError("X_ref can't be None!")
+#             X.shape = (N, n_features)
+#         '''
+#         if self._fit_matrix is None or self._fit_vector is None:
+#             raise ValueError("GPR not correctly fitted!")
+#         if self.X_ref is None:
+#             raise ValueError("X_ref can't be None!")
         
-        # ref_vectors = self._build_cov_func(self.X_ref, X).T
+#         ref_vectors = self._build_cov_func(self.X_ref, X).T
 
-        # means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
+#         means = ref_vectors@solve(self._fit_matrix,self._fit_vector)
 
-        # if return_std:
-        #     X_cov = self._build_cov_vector(X)
+#         if return_std:
+#             X_cov = self._build_cov_vector(X)
 
-        #     first_temp = self._build_xTAx(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
-        #     second_temp = self.noise_var * self._build_xTAx(self._fit_matrix, ref_vectors)
+#             first_temp = self._build_xTAx(self._K_ref + jnp.eye(len(self.X_ref)) * self.diag_add, ref_vectors)
+#             second_temp = self.noise_var * self._build_xTAx(self._fit_matrix, ref_vectors)
             
-        #     stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
+#             stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
             
-        #     return means, stds
+#             return means, stds
         
-        # return means
+#         return means
         '''
             X1.shape = (N1, n_features)
             X2.shape = (N2, n_features)
