@@ -3,8 +3,10 @@ from jax.scipy.linalg import solve
 from jax.scipy.optimize import minimize
 from ..kernels import RBF
 from jax import jit, vmap, grad
+from jax.lax import fori_loop
 from functools import partial
 import matplotlib.pyplot as plt
+from ..metrics import MaximumAPosteriori, lognormal_prior
 
 
 class BaseGPR:
@@ -24,8 +26,80 @@ class BaseGPR:
         # initialized variables to save from the fitting step
         self._fit_vector = None
         self._fit_matrix = None
-        self.X_split = None
+        self.forward_args = []
 
+        # optimizer
+        self.prior = lambda x: lognormal_prior(x, -jnp.log(noise_var))
+        self.mle = MaximumAPosteriori(noise_prior=self.prior)
+
+    def train(self, X_data, Y_data) -> None:
+        '''
+            Fits the GPR Model to the given data
+
+            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
+            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+
+            Thin wrapper with all side effects around the pure functions 
+            self.optimize and self.forward that do the actual work.
+        '''
+        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
+        self.forward_args.append(jnp.split(X_data, sum_splits))
+
+        self.params = self.optimize(self.params, Y_data, *self.forward_args)
+        self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
+
+    def forward(self, params, Y_data, *args):
+        raise NotImplementedError("Forward method not yet implemented!")
+    
+    def eval(self, X, return_std=False):
+        '''
+            Predicts the posterior mean (and std if return_std=True) at each point in X
+            X.shape = (N, n_features)
+            
+            Thin wrapper with all side effects around the pure function 
+            self.eval that does the actual work.
+        '''
+        if self._fit_matrix is None or self._fit_vector is None:
+            raise ValueError("GPR not correctly fitted!")
+        
+        if return_std:
+            return self.mean_std_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
+        
+        return self.mean_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
+    
+    def mean_eval(self, params, X, fitmatrix, fitvector, *args):
+        raise NotImplementedError("Forward method not yet implemented!")
+        
+    def mean_std_eval(self, params, X, fitmatrix, fitvector, *args):
+        raise NotImplementedError("Forward method not yet implemented!")
+
+    @partial(jit, static_argnums=(0))
+    def _min_obj(self, params, *args):
+        fitmatrix, fitvector = self.forward(params, *args)
+        return -self.mle.forward(params, fitmatrix, fitvector)
+ 
+    @partial(jit, static_argnums=(0))
+    def testfunction(self, left_params, right_params, *args):
+        def loop_ls(i, val):
+            temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
+            return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
+        
+        val = jnp.array([0.0, self._min_obj(jnp.array([*left_params, 1e-4, *right_params]), *args)])
+        
+        result = fori_loop(1, 100, loop_ls, val)
+
+        return result
+    
+    def optimize(self, init_params, *args):
+
+        print(init_params[:-1])
+
+        print(self.testfunction(init_params[:-1],[], *args))
+
+        return init_params
+        
+        raise ValueError("Optimization failed!")
+    
     # @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None, None, 0))
     def _build_xTAx(self, A, X):
@@ -109,66 +183,11 @@ class BaseGPR:
 class ExactGPR(BaseGPR):
     def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0, 1.0), noise_var=1e-6) -> None:
         super().__init__(kernel, data_split, kernel_params, noise_var)
-    
-    @partial(jit, static_argnums=(0))
-    def LogLikelyhoodEstimate(self, params, X_split, Y_data):
-        fitmatrix, fitvector = self.forward(X_split, Y_data, params)
-        _, logdet = jnp.linalg.slogdet(fitmatrix)
-        fitvector = fitvector.reshape(-1)
-        return -0.5*(len(fitvector) * jnp.log(2*jnp.pi) + logdet + fitvector.T@solve(fitmatrix,fitvector))
 
-    def optimize(self, initial_params, X_split, Y_data):
-        # result = jit(minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data, data_split), method="BFGS"))
-        # result = minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_split, Y_data), method="BFGS")
-
-        # if result.success:
-        #     if result.status == 1:
-        #         print("Max iterations reached!")
-        #         return result.x
-        #     if result.status == 0:
-        #         return result.x
-            
-        # raise ValueError("An error occured while maximizing the log likelyhood")
-
-        bounds = (1e-5,1e5)
-        prob_params = lambda x: 0.0 if x>0.0 else -jnp.inf
-        prob_noise = lambda x: -jnp.inf if x<0.0 else -0.5*((jnp.log(x)+2.0)/0.5)**2
-        
-        grids = [jnp.linspace(0.0,1.0,40),jnp.linspace(0.0,4.0,40)]
-        mesh = jnp.array(jnp.meshgrid(*grids)).reshape(2,1600).T
-        params = jnp.array([[elem[0],1.0,elem[1]] for elem in mesh])
-        mle = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) + prob_params(param[2]) + prob_noise(param[0]) for param in params]).reshape(40,40)
-        # optim = params[jnp.argmax(mle)]
-        # print(params.shape)
-
-        plt.plot(grids[0],mle[17,:])
-        plt.plot(grids[1],mle[:,3])
-
-        optim_params = jnp.array([0.01, 1.0, 1.7])
-
-        # plt.pcolormesh(*grids,mle)
-        # plt.colorbar()
-
-        return optim_params
-        
-    def fit(self, X_data, Y_data) -> None:
-        '''
-            Fits the GPR Model to the given data
-
-            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
-            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
-
-            Thin wrapper with all side effects around the pure functions 
-            self.optimize and self.forward that do the actual work.
-        '''        
-        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
-        self.X_split = jnp.split(X_data, sum_splits)
-
-        self.params = self.optimize(self.params, self.X_split, Y_data)
-        self._fit_matrix, self._fit_vector = self.forward(self.X_split, Y_data, self.params)
+        self.forward_args = []
 
     @partial(jit, static_argnums=(0))
-    def forward(self, X_split, Y_data, params):
+    def forward(self, params, Y_data, X_split):
         # Build the full covariance Matrix between all datapoints in X_data depending on if they   
         # represent function evaluations or derivative evaluations
         K_NN = self._CovMatrix_Kernel(X_split[0], X_split[0], params=params[1:])
@@ -189,24 +208,8 @@ class ExactGPR(BaseGPR):
         # numerical stability of the inversion and determinant
         return (jnp.eye(len(K_NN)) * (params[0] + 1e-6) + K_NN), (Y_data)
     
-    def predict(self, X, return_std=False):
-        '''
-            Predicts the posterior mean (and std if return_std=True) at each point in X
-            X.shape = (N, n_features)
-            
-            Thin wrapper with all side effects around the pure function 
-            self.eval that does the actual work.
-        '''
-        if self._fit_matrix is None or self._fit_vector is None:
-            raise ValueError("GPR not correctly fitted!")
-        
-        if return_std:
-            return self.eval_mean_std(X, self.X_split, self._fit_matrix, self._fit_vector, self.params)
-        
-        return self.eval_mean(X, self.X_split, self._fit_matrix, self._fit_vector, self.params, return_std)
-    
     @partial(jit, static_argnums=(0,))
-    def eval_mean(self, X, X_split, fitmatrix, fitvector, params):
+    def mean_eval(self, params, X, fitmatrix, fitvector, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
@@ -217,7 +220,7 @@ class ExactGPR(BaseGPR):
         return means
     
     @partial(jit, static_argnums=(0,))
-    def eval_mean_std(self, X, X_split, fitmatrix, fitvector, params):
+    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
@@ -238,55 +241,10 @@ class ApproximateGPR(BaseGPR):
         '''
         super().__init__(kernel, data_split, kernel_params, noise_var)
 
-        self.X_ref = X_ref
-        self._K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=self.params[1:])
-    
-    def LogLikelyhoodEstimate(self, params, X_split, Y_data, X_ref, K_ref):
-        fitmatrix, fitvector = self.forward(X_split, Y_data, X_ref, K_ref, params)
-        _, logdet = jnp.linalg.slogdet(fitmatrix)
-        fitvector = fitvector.reshape(-1)
-        return -0.5*(len(fitvector) * jnp.log(2*jnp.pi) + logdet + fitvector.T@solve(fitmatrix,fitvector))
-
-    def optimize(self, initial_params, X_split, Y_data, X_ref, K_ref):
-        # result = jit(minimize(self.negativeLogLikelyhoodEstimate, initial_params, (X_data, Y_data, data_split), method="BFGS"))
-        # result = minimize(self.LogLikelyhoodEstimate, initial_params, (X_split, Y_data, X_ref, K_ref), method="BFGS")
-
-        # print(result)
-
-        # if result.success:
-        #     if result.status == 1:
-        #         print("Max iterations reached!")
-        #         return result.x
-        #     if result.status == 0:
-        #         return result.x
-            
-        # raise ValueError("An error occured while maximizing the log likelyhood")
-
-        grid = jnp.linspace(0.01,1.0)
-        params = jnp.array([[elem,1.0,1.0] for elem in grid])
-        mle = jnp.array([self.LogLikelyhoodEstimate(param) for param in params])
-        
-        plt.plot(grid,mle)
-        plt.savefig("test.png")
-   
-    def fit(self, X_data, Y_data) -> None:
-        '''
-            Fits the GPR Model to the given data
-
-            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
-            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
-
-            Thin wrapper with all side effects around the pure functions 
-            self.optimize and self.forward that do the actual work.
-        '''
-        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
-        self.X_split = jnp.split(X_data, sum_splits)
-
-        # self.params = self.optimize(self.params, self.X_split, Y_data, self.X_ref, self._K_ref)
-        self._fit_matrix, self._fit_vector = self.forward(self.X_split, Y_data, self.X_ref, self._K_ref, self.params)
+        self.forward_args = [X_ref, self._CovMatrix_Kernel(X_ref, X_ref, params=self.params[1:])]
 
     @partial(jit, static_argnums=(0,))
-    def forward(self, X_split, Y_data, X_ref, K_ref, params):
+    def forward(self, params, Y_data, X_ref, K_ref, X_split):
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):
             K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
@@ -297,25 +255,9 @@ class ApproximateGPR(BaseGPR):
         fit_vector = K_MN@Y_data
 
         return fit_matrix, fit_vector
-
-    def predict(self, X, return_std=False):
-        '''
-            Predicts the posterior mean (and std if return_std=True) at each point in X
-            X.shape = (N, n_features)
-            
-            Thin wrapper with all side effects around the pure function 
-            self.eval that does the actual work.
-        '''
-        if self._fit_matrix is None or self._fit_vector is None:
-            raise ValueError("GPR not correctly fitted!")
-        
-        if return_std:
-            return self.eval_mean_std(X, self.X_ref, self._K_ref, self._fit_matrix, self._fit_vector, self.params)
-        
-        return self.eval_mean(X, self.X_ref, self._fit_matrix, self._fit_vector, self.params, return_std)
     
     @partial(jit, static_argnums=(0,))
-    def eval_mean(self, X, X_ref, fitmatrix, fitvector, params):
+    def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, K_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
         means = ref_vectors@solve(fitmatrix,fitvector)
@@ -323,7 +265,7 @@ class ApproximateGPR(BaseGPR):
         return means
     
     @partial(jit, static_argnums=(0,))
-    def eval_mean_std(self, X, X_ref, K_ref, fitmatrix, fitvector, params):
+    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, K_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
         means = ref_vectors@solve(fitmatrix,fitvector)
