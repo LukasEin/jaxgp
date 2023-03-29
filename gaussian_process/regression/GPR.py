@@ -129,29 +129,27 @@ class ExactGPR(BaseGPR):
         #         return result.x
             
         # raise ValueError("An error occured while maximizing the log likelyhood")
+
+        bounds = (1e-5,1e5)
+        prob_params = lambda x: 0.0 if x>0.0 else -jnp.inf
+        prob_noise = lambda x: -jnp.inf if x<0.0 else -0.5*((jnp.log(x)+2.0)/0.5)**2
         
-        grids = [jnp.linspace(0.5,5.0,50),jnp.linspace(0.5,10.0,50)]
-        mesh = jnp.array(jnp.meshgrid(*grids)).reshape(2,2500).T
+        grids = [jnp.linspace(0.0,1.0,40),jnp.linspace(0.0,4.0,40)]
+        mesh = jnp.array(jnp.meshgrid(*grids)).reshape(2,1600).T
         params = jnp.array([[elem[0],1.0,elem[1]] for elem in mesh])
-        mle = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) for param in params]).reshape(50,50)
+        mle = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) + prob_params(param[2]) + prob_noise(param[0]) for param in params]).reshape(40,40)
+        # optim = params[jnp.argmax(mle)]
+        # print(params.shape)
 
-        plt.pcolormesh(*grids,mle)
-        plt.colorbar()
+        plt.plot(grids[0],mle[17,:])
+        plt.plot(grids[1],mle[:,3])
 
-        # grid = jnp.linspace(0.01,5.0)
-        # params = jnp.array([[elem,1.0,1.0] for elem in grid])
-        # mle_1 = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) for param in params])
-        # params = jnp.array([[0.1,elem,1.0] for elem in grid])
-        # mle_2 = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) for param in params])
-        # params = jnp.array([[0.1,1.0,elem] for elem in grid])
-        # mle_3 = jnp.array([self.LogLikelyhoodEstimate(param,X_split,Y_data) for param in params])
-        
-        # plt.plot(grid,mle_1,label="noise")
-        # plt.plot(grid,mle_2,label="pre_coeff")
-        # plt.plot(grid,mle_3,label="lengthscale")
-        # plt.legend()
+        optim_params = jnp.array([0.01, 1.0, 1.7])
 
-        return initial_params
+        # plt.pcolormesh(*grids,mle)
+        # plt.colorbar()
+
+        return optim_params
         
     def fit(self, X_data, Y_data) -> None:
         '''

@@ -8,6 +8,7 @@ class BaseKernel:
         self._ddf = jacfwd(self._df, argnums=0)
 
         self.num_params = 0
+        self.param_bounds = None
 
     def __add__(self, other):
         return SumKernel(self, other)
@@ -48,10 +49,11 @@ class BaseKernel:
         return self._ddf(x1, x2, params)[index_1, index_2]
 
 class RBF(BaseKernel):
-    def __init__(self):
+    def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
         super().__init__()
 
         self.num_params = 2
+        self.param_bounds = param_bounds
     
     def eval_func(self, x1, x2, params=(1.0, 1.0)):
         '''
@@ -67,12 +69,13 @@ class RBF(BaseKernel):
         return params[0] * jnp.exp(-0.5 * jnp.dot(diff, diff))
     
 class Linear(BaseKernel):
-    def __init__(self):
+    def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
         super().__init__()
 
         self.num_params = 2
+        self.param_bounds = param_bounds
 
-    def eval_func(self, x1, x2, params: tuple = (1.0, 0.0)):
+    def eval_func(self, x1, x2, params=(1.0, 0.0)):
         '''
             returns Linear(x1, x2)
             x1.shape = (n_features,)
@@ -90,8 +93,9 @@ class SumKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
+        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
-    def eval_func(self, x1, x2, params: tuple):
+    def eval_func(self, x1, x2, params):
         '''
             returns Kernel1(x1, x2) + Kernel2(x1, x2)
             x1.shape = (n_features,)
@@ -107,8 +111,9 @@ class ProductKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
+        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
-    def eval_func(self, x1, x2, params: tuple):
+    def eval_func(self, x1, x2, params):
         '''
             returns Kernel1(x1, x2) + Kernel2(x1, x2)
             x1.shape = (n_features,)
