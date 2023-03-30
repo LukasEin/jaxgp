@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from ..metrics import MaximumAPosteriori, Expon, Zero
 from jax.scipy.stats import gamma
 
+from jaxopt import ProjectedGradient
+from jaxopt.projection import projection_non_negative
+
 
 class BaseGPR:
     def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4) -> None:
@@ -32,7 +35,7 @@ class BaseGPR:
         # optimizer
         self.prior = lambda x: gamma.logpdf(x, 2.0, 0.0, noise)
         self.kernel_constraint = Expon(0.2)
-        self.mle = MaximumAPosteriori()#kernel_constraint=self.kernel_constraint,noise_prior=None)
+        self.mle = MaximumAPosteriori(Zero(), Zero(), noise_prior=self.prior)#kernel_constraint=self.kernel_constraint,noise_prior=None)
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -46,6 +49,8 @@ class BaseGPR:
         '''
         sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
         self.forward_args.append(jnp.split(X_data, sum_splits))
+
+        print(len(self.forward_args))
 
         self.params = self.optimize(self.params, Y_data, *self.forward_args)
         self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
@@ -127,23 +132,16 @@ class BaseGPR:
         # return result
     
     def optimize(self, init_params, *args):
-        # grid = jnp.linspace(1e-4,5.0,100)
-        # params = jnp.array([[elem,1.8] for elem in grid])
-        # mle_1 = jnp.array([self._min_obj(param,*args) for param in params])
-        # params = jnp.array([[0.1,elem] for elem in grid])
-        # mle_2 = jnp.array([self._min_obj(param,*args) for param in params])
+        print(len(args))
+        solver = ProjectedGradient(self._min_obj, projection=projection_non_negative)
+        result = solver.run(init_params, None, *args)
 
-        # plt.plot(grid,mle_1,label="noise")
-        # plt.plot(grid,mle_2,label="lengthscale")
-        # plt.legend()
-        # plt.ylim(-5,0)
+        print(result)
 
-        # print(mle_2[20:40])
+        # test = self.testfunction(init_params, *args)
+        # print(test)
 
-        test = self.testfunction(init_params, *args)
-        print(test)
-
-        return test
+        return result.params
         
         raise ValueError("Optimization failed!")
     
@@ -294,22 +292,6 @@ class ApproximateGPR(BaseGPR):
         super().__init__(kernel, data_split, kernel_params, noise)
 
         self.forward_args = [X_ref, ]
-
-    def train(self, X_data, Y_data) -> None:
-        '''
-            Fits the GPR Model to the given data
-
-            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
-            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
-
-            Thin wrapper with all side effects around the pure functions 
-            self.optimize and self.forward that do the actual work.
-        '''
-        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
-        self.forward_args.append(jnp.split(X_data, sum_splits))
-
-        self.params = self.optimize(self.params, Y_data, *self.forward_args)
-        self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
 
     @partial(jit, static_argnums=(0,))
     def forward(self, params, Y_data, X_ref, X_split):
