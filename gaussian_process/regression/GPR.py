@@ -6,7 +6,7 @@ from jax import jit, vmap, grad
 from jax.lax import fori_loop
 from functools import partial
 import matplotlib.pyplot as plt
-from ..metrics import MaximumAPosteriori, Expon
+from ..metrics import MaximumAPosteriori, Expon, Zero
 from jax.scipy.stats import gamma
 
 
@@ -32,7 +32,7 @@ class BaseGPR:
         # optimizer
         self.prior = lambda x: gamma.logpdf(x, 2.0, 0.0, noise)
         self.kernel_constraint = Expon(0.2)
-        self.mle = MaximumAPosteriori(kernel_constraint=self.kernel_constraint,noise_prior=None)
+        self.mle = MaximumAPosteriori(kernel_constraint=self.kernel_constraint, noise_prior=self.prior)#kernel_constraint=self.kernel_constraint,noise_prior=None)
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -74,59 +74,96 @@ class BaseGPR:
         
     def mean_std_eval(self, params, X, fitmatrix, fitvector, *args):
         raise NotImplementedError("Forward method not yet implemented!")
-
-    @partial(jit, static_argnums=(0))
+    
     def _min_obj(self, params, *args):
-        fitmatrix, fitvector = self.forward(params, *args)
-        return -self.mle.forward(params, fitmatrix, fitvector)
+        raise NotImplementedError("Forward method not yet implemented!")
  
-    @partial(jit, static_argnums=(0))
-    def testfunction(self, left_params, right_params, *args):
-        num_steps = 40
-        def get_next_param():
-            grid = jnp.linspace(1e-4, 5.0, num_steps)
+    # @partial(jit, static_argnums=(0))
+    def testfunction(self, init_params, *args):
+        # num_steps = 50
 
-            for i in grid:
-                for j in grid:
-                    for k in grid:
-                        yield jnp.array([i, j, k])
+        # minimum = jnp.array([jnp.inf, 0.0, 0.0])
 
+        # grid = jnp.linspace(1e-4, 5.0, num_steps)
+
+        # for noise in grid:
+        #     for ls in grid:
+        #         next_try = self._min_obj(jnp.array([noise, ls]), *args)
+        #         minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise, ls]), minimum)
+        
+        num_steps = 50
+        grid = jnp.linspace(1e-4, 5.0, num_steps)
+        # best_params = jnp.array([0.01, 1.0])
+        # old_params = jnp.array([jnp.inf, jnp.inf])
+
+        best_params = jnp.array(init_params)
+        old_params = jnp.ones_like(best_params)*jnp.inf
+
+        while(jnp.sum(jnp.abs(old_params-best_params)) > 1e-6):
+            old_params = best_params
+
+            new_params = []
+
+            for i,_ in enumerate(best_params):
+                minimum = jnp.array([jnp.inf, jnp.inf])
+
+                # print(best_params[:i], best_params[i+1:])
+
+                for param in grid:
+                    next_try = self._min_obj(jnp.array([*best_params[:i], param, *best_params[i+1:]]), *args)
+                    minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, param]), minimum)
+
+                new_params.append(minimum[1])
+                
+                # best_params = jnp.array([*best_params[:i], minimum[1], *best_params[i+1:]])
+
+            best_params = (jnp.array(new_params) + best_params) / 2
+            print(f"{old_params=}", f"{best_params=}")
+
+            # minimum = jnp.array([jnp.inf, 0.0])
+            # for ls in grid:
+            #     next_try = self._min_obj(jnp.array([best_params[0], ls]), *args)
+            #     minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, ls]), minimum)
+
+            # best_params = jnp.array([best_params[0], minimum[1]])
+                
+            # minimum = jnp.array([jnp.inf, 0.0])
+            # for noise in grid:
+            #     next_try = self._min_obj(jnp.array([noise, best_params[1]]), *args)
+            #     minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise]), minimum)
+
+            # best_params = jnp.array([minimum[1], best_params[1]])
         
 
-
-        def loop_ls(i, val):
-            temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
-            return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
+        return best_params
+        # def loop_ls(i, val):
+        #     temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
+        #     return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
         
-        val = jnp.array([0.0, self._min_obj(jnp.array([*left_params, 1e-4, *right_params]), *args)])
+        # val = jnp.array([0.0, self._min_obj(jnp.array([*left_params, 1e-4, *right_params]), *args)])
         
-        result = fori_loop(1, 100, loop_ls, val)
+        # result = fori_loop(1, 100, loop_ls, val)
 
-        return result
+        # return result
     
     def optimize(self, init_params, *args):
-        # result = minimize(self._min_obj,init_params, args, method="BFGS")
+        # grid = jnp.linspace(1e-4,5.0,100)
+        # params = jnp.array([[elem,1.8] for elem in grid])
+        # mle_1 = jnp.array([self._min_obj(param,*args) for param in params])
+        # params = jnp.array([[0.1,elem] for elem in grid])
+        # mle_2 = jnp.array([self._min_obj(param,*args) for param in params])
 
-        # print(result)
+        # plt.plot(grid,mle_1,label="noise")
+        # plt.plot(grid,mle_2,label="lengthscale")
+        # plt.legend()
+        # plt.ylim(-5,0)
 
-        grid = jnp.linspace(1e-4,5.0,100)
-        params = jnp.array([[elem,1.8] for elem in grid])
-        mle_1 = jnp.array([self._min_obj(param,*args) for param in params])
-        params = jnp.array([[0.1,elem] for elem in grid])
-        mle_2 = jnp.array([self._min_obj(param,*args) for param in params])
+        # print(mle_2[20:40])
 
-        plt.plot(grid,mle_1,label="noise")
-        plt.plot(grid,mle_2,label="lengthscale")
-        plt.legend()
-        plt.ylim(-5,0)
+        test = self.testfunction(init_params, *args)
+        print(test)
 
-        print(mle_2[20:40])
-
-        # print(init_params[:-1])
-
-        # print(self.testfunction(init_params[:-1],[], *args))
-
-        return init_params
+        return test
         
         raise ValueError("Optimization failed!")
     
@@ -141,7 +178,7 @@ class BaseGPR:
 
             Calculates x.T@A^-1@x for each of the N x in X (x.shape = (M,)).
         '''
-        return X.T@solve(A,X)
+        return X.T@solve(A,X,assume_a="pos")
     
     # @partial(jit, static_argnums=(0,))
     # @partial(vmap, in_axes=(None,0))
@@ -245,7 +282,7 @@ class ExactGPR(BaseGPR):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
-        means = full_vectors@solve(fitmatrix,fitvector)
+        means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
         
         return means
     
@@ -256,13 +293,18 @@ class ExactGPR(BaseGPR):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
-        means = full_vectors@solve(fitmatrix,fitvector)
+        means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])  
         temp = self._build_xTAx(fitmatrix, full_vectors)      
         stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
         
         return means, stds
+
+    @partial(jit, static_argnums=(0))
+    def _min_obj(self, params, *args):
+        fitmatrix, fitvector = self.forward(params, *args)
+        return -self.mle.forward(params, fitmatrix, fitvector)
 
 class ApproximateGPR(BaseGPR):
     def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4) -> None:
@@ -271,14 +313,32 @@ class ApproximateGPR(BaseGPR):
         '''
         super().__init__(kernel, data_split, kernel_params, noise)
 
-        self.forward_args = [X_ref, self._CovMatrix_Kernel(X_ref, X_ref, params=self.params[1:])]
+        self.forward_args = [X_ref, ]
+
+    def train(self, X_data, Y_data) -> None:
+        '''
+            Fits the GPR Model to the given data
+
+            X_data.shape = (n_datapoints + sum(n_derivpoints), n_features)
+            Y_data.shape = (n_datapoints + sum(n_derivpoints),)
+
+            Thin wrapper with all side effects around the pure functions 
+            self.optimize and self.forward that do the actual work.
+        '''
+        sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
+        self.forward_args.append(jnp.split(X_data, sum_splits))
+
+        self.params = self.optimize(self.params, Y_data, *self.forward_args)
+        self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
 
     @partial(jit, static_argnums=(0,))
-    def forward(self, params, Y_data, X_ref, K_ref, X_split):
+    def forward(self, params, Y_data, X_ref, X_split):
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):
             K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
             
         # added small positive diagonal to make the matrix positive definite
         fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
@@ -287,20 +347,22 @@ class ApproximateGPR(BaseGPR):
         return fit_matrix, fit_vector
     
     @partial(jit, static_argnums=(0,))
-    def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, K_ref, X_split):
+    def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector)
+        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
         
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, K_ref, X_split):
+    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector)
+        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])
+
+        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
         first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
         second_temp = params[0]**2 * self._build_xTAx(fitmatrix, ref_vectors)
@@ -308,3 +370,16 @@ class ApproximateGPR(BaseGPR):
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
         
         return means, stds
+
+    @partial(jit, static_argnums=(0))
+    def _min_obj(self, params, Y_data, X_ref, X_split):
+        K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
+        for i,elem in enumerate(X_split[1:]):
+            K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
+
+        fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN, assume_a="pos")
+
+        return -self.mle.forward(params, fitmatrix, Y_data)

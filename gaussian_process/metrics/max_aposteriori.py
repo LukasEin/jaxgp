@@ -4,6 +4,10 @@ from functools import partial
 from jax import jit, grad
 from jax.scipy.stats import expon
 
+def Zero():
+    f = lambda x: 0.0
+    return f
+
 def Positive():
     f = lambda x: jnp.where(x > 0.0, 0.0, -jnp.inf)
     return f
@@ -38,7 +42,7 @@ class MaximumAPosteriori:
         '''
         _, logdet = jnp.linalg.slogdet(fitmatrix)
         fitvector = fitvector.reshape(-1)
-        mle = -0.5*(logdet + fitvector.T@solve(fitmatrix,fitvector))
+        mle = -0.5*(logdet + fitvector.T@solve(fitmatrix,fitvector, assume_a="pos"))
         prob_noise = self.noise_constraint(params[0])
         prob_kernel = jnp.sum(self.kernel_constraint(params[1:]))
 
