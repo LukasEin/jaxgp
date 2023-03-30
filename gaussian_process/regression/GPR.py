@@ -32,7 +32,7 @@ class BaseGPR:
         # optimizer
         self.prior = lambda x: gamma.logpdf(x, 2.0, 0.0, noise)
         self.kernel_constraint = Expon(0.2)
-        self.mle = MaximumAPosteriori(kernel_constraint=self.kernel_constraint, noise_prior=self.prior)#kernel_constraint=self.kernel_constraint,noise_prior=None)
+        self.mle = MaximumAPosteriori()#kernel_constraint=self.kernel_constraint,noise_prior=None)
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -80,9 +80,9 @@ class BaseGPR:
  
     # @partial(jit, static_argnums=(0))
     def testfunction(self, init_params, *args):
-        # num_steps = 50
+        # num_steps = 80
 
-        # minimum = jnp.array([jnp.inf, 0.0, 0.0])
+        # minimum = jnp.array([jnp.inf, jnp.inf, jnp.inf])
 
         # grid = jnp.linspace(1e-4, 5.0, num_steps)
 
@@ -92,14 +92,12 @@ class BaseGPR:
         #         minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise, ls]), minimum)
         
         num_steps = 50
-        grid = jnp.linspace(1e-4, 5.0, num_steps)
-        # best_params = jnp.array([0.01, 1.0])
-        # old_params = jnp.array([jnp.inf, jnp.inf])
+        grid = jnp.linspace(1e-4, 3.0, num_steps)
 
         best_params = jnp.array(init_params)
         old_params = jnp.ones_like(best_params)*jnp.inf
 
-        while(jnp.sum(jnp.abs(old_params-best_params)) > 1e-6):
+        while(jnp.sum(jnp.abs(old_params-best_params)) > 1e-3):
             old_params = best_params
 
             new_params = []
@@ -107,32 +105,14 @@ class BaseGPR:
             for i,_ in enumerate(best_params):
                 minimum = jnp.array([jnp.inf, jnp.inf])
 
-                # print(best_params[:i], best_params[i+1:])
-
                 for param in grid:
                     next_try = self._min_obj(jnp.array([*best_params[:i], param, *best_params[i+1:]]), *args)
                     minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, param]), minimum)
 
                 new_params.append(minimum[1])
-                
-                # best_params = jnp.array([*best_params[:i], minimum[1], *best_params[i+1:]])
 
             best_params = (jnp.array(new_params) + best_params) / 2
-            print(f"{old_params=}", f"{best_params=}")
-
-            # minimum = jnp.array([jnp.inf, 0.0])
-            # for ls in grid:
-            #     next_try = self._min_obj(jnp.array([best_params[0], ls]), *args)
-            #     minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, ls]), minimum)
-
-            # best_params = jnp.array([best_params[0], minimum[1]])
-                
-            # minimum = jnp.array([jnp.inf, 0.0])
-            # for noise in grid:
-            #     next_try = self._min_obj(jnp.array([noise, best_params[1]]), *args)
-            #     minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise]), minimum)
-
-            # best_params = jnp.array([minimum[1], best_params[1]])
+            # print(f"{old_params=}", f"{best_params=}")
         
 
         return best_params
