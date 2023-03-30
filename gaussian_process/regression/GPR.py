@@ -6,11 +6,12 @@ from jax import jit, vmap, grad
 from jax.lax import fori_loop
 from functools import partial
 import matplotlib.pyplot as plt
-from ..metrics import MaximumAPosteriori, lognormal_prior
+from ..metrics import MaximumAPosteriori, Expon
+from jax.scipy.stats import gamma
 
 
 class BaseGPR:
-    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise_var=1e-6) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4) -> None:
         '''
             supported kernels are found in gaussion_process.kernels
 
@@ -20,7 +21,7 @@ class BaseGPR:
             noise_var : float           ... assumed noise in the evaluation of data
         '''
         self.kernel = kernel
-        self.params = jnp.array((noise_var,) + init_kernel_params)
+        self.params = jnp.array((noise,) + init_kernel_params)
         self.data_split = jnp.array(data_split)
 
         # initialized variables to save from the fitting step
@@ -29,8 +30,9 @@ class BaseGPR:
         self.forward_args = []
 
         # optimizer
-        self.prior = lambda x: lognormal_prior(x, -jnp.log(noise_var))
-        self.mle = MaximumAPosteriori(noise_prior=self.prior)
+        self.prior = lambda x: gamma.logpdf(x, 2.0, 0.0, noise)
+        self.kernel_constraint = Expon(0.2)
+        self.mle = MaximumAPosteriori(kernel_constraint=self.kernel_constraint,noise_prior=None)
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -80,6 +82,18 @@ class BaseGPR:
  
     @partial(jit, static_argnums=(0))
     def testfunction(self, left_params, right_params, *args):
+        num_steps = 40
+        def get_next_param():
+            grid = jnp.linspace(1e-4, 5.0, num_steps)
+
+            for i in grid:
+                for j in grid:
+                    for k in grid:
+                        yield jnp.array([i, j, k])
+
+        
+
+
         def loop_ls(i, val):
             temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
             return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
@@ -91,10 +105,26 @@ class BaseGPR:
         return result
     
     def optimize(self, init_params, *args):
+        # result = minimize(self._min_obj,init_params, args, method="BFGS")
 
-        print(init_params[:-1])
+        # print(result)
 
-        print(self.testfunction(init_params[:-1],[], *args))
+        grid = jnp.linspace(1e-4,5.0,100)
+        params = jnp.array([[elem,1.8] for elem in grid])
+        mle_1 = jnp.array([self._min_obj(param,*args) for param in params])
+        params = jnp.array([[0.1,elem] for elem in grid])
+        mle_2 = jnp.array([self._min_obj(param,*args) for param in params])
+
+        plt.plot(grid,mle_1,label="noise")
+        plt.plot(grid,mle_2,label="lengthscale")
+        plt.legend()
+        plt.ylim(-5,0)
+
+        print(mle_2[20:40])
+
+        # print(init_params[:-1])
+
+        # print(self.testfunction(init_params[:-1],[], *args))
 
         return init_params
         
@@ -181,8 +211,8 @@ class BaseGPR:
         return func(X1, X2)
 
 class ExactGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0, 1.0), noise_var=1e-6) -> None:
-        super().__init__(kernel, data_split, kernel_params, noise_var)
+    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4) -> None:
+        super().__init__(kernel, data_split, kernel_params, noise)
 
         self.forward_args = []
 
@@ -206,7 +236,7 @@ class ExactGPR(BaseGPR):
 
         # additional small diagonal element added for 
         # numerical stability of the inversion and determinant
-        return (jnp.eye(len(K_NN)) * (params[0] + 1e-6) + K_NN), (Y_data)
+        return (jnp.eye(len(K_NN)) * (params[0]**2 + 1e-6) + K_NN), (Y_data)
     
     @partial(jit, static_argnums=(0,))
     def mean_eval(self, params, X, fitmatrix, fitvector, X_split):
@@ -235,11 +265,11 @@ class ExactGPR(BaseGPR):
         return means, stds
 
 class ApproximateGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0, ), X_ref=None, kernel_params= (1.0, 1.0), noise_var= 1e-6) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4) -> None:
         '''
             Approximates the full GP regressor by the Projected Process Approximation.
         '''
-        super().__init__(kernel, data_split, kernel_params, noise_var)
+        super().__init__(kernel, data_split, kernel_params, noise)
 
         self.forward_args = [X_ref, self._CovMatrix_Kernel(X_ref, X_ref, params=self.params[1:])]
 
@@ -251,7 +281,7 @@ class ApproximateGPR(BaseGPR):
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
             
         # added small positive diagonal to make the matrix positive definite
-        fit_matrix = params[0] * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
+        fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
         fit_vector = K_MN@Y_data
 
         return fit_matrix, fit_vector
@@ -273,7 +303,7 @@ class ApproximateGPR(BaseGPR):
         X_cov = self._build_cov_vector(X, params[1:])
 
         first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
-        second_temp = params[0] * self._build_xTAx(fitmatrix, ref_vectors)
+        second_temp = params[0]**2 * self._build_xTAx(fitmatrix, ref_vectors)
         
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
         

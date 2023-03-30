@@ -2,13 +2,18 @@ import jax.numpy as jnp
 from jax.scipy.linalg import solve
 from functools import partial
 from jax import jit, grad
+from jax.scipy.stats import expon
 
 def Positive():
-    f = lambda x: jnp.where(x > 0, 0.0, -jnp.inf)
+    f = lambda x: jnp.where(x > 0.0, 0.0, -jnp.inf)
     return f
 
 def Greater(val):
     f = lambda x: jnp.where(x > val, 0.0, -jnp.inf)
+    return f
+
+def Expon(val):
+    f = lambda x: jnp.where(x > 0.0, expon.logpdf(x, 0.0, val), -jnp.inf) 
     return f
 
 def lognormal_prior(x,std):

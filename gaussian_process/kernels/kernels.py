@@ -49,13 +49,13 @@ class BaseKernel:
         return self._ddf(x1, x2, params)[index_1, index_2]
 
 class RBF(BaseKernel):
-    def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
+    def __init__(self, param_bounds=((1e-5, 1e5),)):
         super().__init__()
 
-        self.num_params = 2
+        self.num_params = 1
         self.param_bounds = param_bounds
     
-    def eval_func(self, x1, x2, params=(1.0, 1.0)):
+    def eval_func(self, x1, x2, ls=(1.0,)):
         '''
             returns RBF(x1, x2)
             x1.shape = (n_features,)
@@ -65,8 +65,8 @@ class RBF(BaseKernel):
                 the second the length_scale
                 if lenghtscale should be (n_features,) must create new kernel
         '''
-        diff = (x1 - x2) / params[1]
-        return params[0] * jnp.exp(-0.5 * jnp.dot(diff, diff))
+        diff = (x1 - x2) / ls[0]
+        return jnp.exp(-0.5 * jnp.dot(diff, diff))
     
 class Linear(BaseKernel):
     def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
