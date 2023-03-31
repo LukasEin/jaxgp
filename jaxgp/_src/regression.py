@@ -1,20 +1,15 @@
 import jax.numpy as jnp
 from jax.scipy.linalg import solve
-from jax.scipy.optimize import minimize
-from ..kernels import RBF
-from jax import jit, vmap, grad
-from jax.lax import fori_loop
+from jax import jit, vmap
 from functools import partial
-import matplotlib.pyplot as plt
-from ..metrics import MaximumAPosteriori, Expon, Zero
-from jax.scipy.stats import gamma
+from jaxopt import ScipyBoundedMinimize
 
-from jaxopt import ProjectedGradient
-from jaxopt.projection import projection_non_negative
+from .kernels import RBF
+from .map import MaximumAPosteriori
 
 
 class BaseGPR:
-    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, noise_prior=None, kernel_prior=None) -> None:
         '''
             supported kernels are found in gaussion_process.kernels
 
@@ -33,9 +28,7 @@ class BaseGPR:
         self.forward_args = []
 
         # optimizer
-        self.prior = lambda x: gamma.logpdf(x, 2.0, 0.0, noise)
-        self.kernel_constraint = Expon(0.2)
-        self.mle = MaximumAPosteriori(Zero(), Zero(), noise_prior=self.prior)#kernel_constraint=self.kernel_constraint,noise_prior=None)
+        self.mle = MaximumAPosteriori()
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -49,8 +42,6 @@ class BaseGPR:
         '''
         sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
         self.forward_args.append(jnp.split(X_data, sum_splits))
-
-        print(len(self.forward_args))
 
         self.params = self.optimize(self.params, Y_data, *self.forward_args)
         self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
@@ -132,9 +123,9 @@ class BaseGPR:
         # return result
     
     def optimize(self, init_params, *args):
-        print(len(args))
-        solver = ProjectedGradient(self._min_obj, projection=projection_non_negative)
-        result = solver.run(init_params, None, *args)
+        # solver = ProjectedGradient(self._min_obj, projection=projection_box)
+        solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b")
+        result = solver.run(init_params, (1e-3,jnp.inf), *args)
 
         print(result)
 
@@ -226,8 +217,8 @@ class BaseGPR:
         return func(X1, X2)
 
 class ExactGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4) -> None:
-        super().__init__(kernel, data_split, kernel_params, noise)
+    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4, *, noise_prior=None, kernel_prior=None) -> None:
+        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior)
 
         self.forward_args = []
 
@@ -282,14 +273,14 @@ class ExactGPR(BaseGPR):
     @partial(jit, static_argnums=(0))
     def _min_obj(self, params, *args):
         fitmatrix, fitvector = self.forward(params, *args)
-        return -self.mle.forward(params, fitmatrix, fitvector)
+        return -self.mle.forward(params, fitmatrix, fitvector) / 5000.0
 
-class ApproximateGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4) -> None:
+class SparseGPR(BaseGPR):
+    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, noise_prior=None, kernel_prior=None) -> None:
         '''
-            Approximates the full GP regressor by the Projected Process Approximation.
+            Sparsifies the full GP regressor by the Projected Process Approximation.
         '''
-        super().__init__(kernel, data_split, kernel_params, noise)
+        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior)
 
         self.forward_args = [X_ref, ]
 
@@ -344,4 +335,4 @@ class ApproximateGPR(BaseGPR):
 
         fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN, assume_a="pos")
 
-        return -self.mle.forward(params, fitmatrix, Y_data)
+        return -self.mle.forward(params, fitmatrix, Y_data) / 5000.0

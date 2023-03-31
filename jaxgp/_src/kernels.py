@@ -1,6 +1,5 @@
-from jax import grad, jacrev, jacfwd, vmap
+from jax import jacrev, jacfwd
 import jax.numpy as jnp
-from functools import partial
 
 class BaseKernel:
     def __init__(self) -> None:

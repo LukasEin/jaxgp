@@ -1,8 +1,8 @@
 import jax.numpy as jnp
-from jax.scipy.linalg import solve
 from jax import random
-from ..kernels import RBF
-from .GPR import ExactGPR
+
+from .kernels import RBF
+from .regression import ExactGPR
 
 class Bootstrapper:
     def __init__(self, X_data, Y_data, data_split, X_predict, noise_var=1e-6, kernel=RBF(), batches=None, n_runs=1, seed=0):
