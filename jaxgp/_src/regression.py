@@ -127,11 +127,6 @@ class BaseGPR:
         solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b")
         result = solver.run(init_params, (1e-3,jnp.inf), *args)
 
-        print(result)
-
-        # test = self.testfunction(init_params, *args)
-        # print(test)
-
         return result.params
         
         raise ValueError("Optimization failed!")
