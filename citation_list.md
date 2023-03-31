@@ -34,3 +34,14 @@
 - Link: http://www.pc-petersen.eu/ML_Lecture.pdf
 - Tikonov reg., Kernel methods
 - LOOK UP STUFF THERE, MAYBE ITS INTERESTING!!!!
+
+## JaxOpt
+
+- Doc: https://jaxopt.github.io/stable/constrained.html
+- Code: https://github.com/google/jaxopt
+- Optimizer used for finding MLE/MAP
+
+## GPytorch
+
+- Link: https://docs.gpytorch.ai/en/v1.6.0/index.html
+- usefull code examples and such
