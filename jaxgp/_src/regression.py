@@ -7,6 +7,8 @@ from jaxopt import ScipyBoundedMinimize
 from .kernels import RBF
 from .map import MaximumAPosteriori
 
+import time
+
 
 class BaseGPR:
     def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, noise_prior=None, kernel_prior=None) -> None:
@@ -73,59 +75,13 @@ class BaseGPR:
     
     def _min_obj(self, params, *args):
         raise NotImplementedError("Forward method not yet implemented!")
- 
-    # @partial(jit, static_argnums=(0))
-    def testfunction(self, init_params, *args):
-        # num_steps = 80
-
-        # minimum = jnp.array([jnp.inf, jnp.inf, jnp.inf])
-
-        # grid = jnp.linspace(1e-4, 5.0, num_steps)
-
-        # for noise in grid:
-        #     for ls in grid:
-        #         next_try = self._min_obj(jnp.array([noise, ls]), *args)
-        #         minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise, ls]), minimum)
-        
-        num_steps = 50
-        grid = jnp.linspace(1e-4, 3.0, num_steps)
-
-        best_params = jnp.array(init_params)
-        old_params = jnp.ones_like(best_params)*jnp.inf
-
-        while(jnp.sum(jnp.abs(old_params-best_params)) > 1e-3):
-            old_params = best_params
-
-            new_params = []
-
-            for i,_ in enumerate(best_params):
-                minimum = jnp.array([jnp.inf, jnp.inf])
-
-                for param in grid:
-                    next_try = self._min_obj(jnp.array([*best_params[:i], param, *best_params[i+1:]]), *args)
-                    minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, param]), minimum)
-
-                new_params.append(minimum[1])
-
-            best_params = (jnp.array(new_params) + best_params) / 2
-            # print(f"{old_params=}", f"{best_params=}")
-        
-
-        return best_params
-        # def loop_ls(i, val):
-        #     temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
-        #     return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
-        
-        # val = jnp.array([0.0, self._min_obj(jnp.array([*left_params, 1e-4, *right_params]), *args)])
-        
-        # result = fori_loop(1, 100, loop_ls, val)
-
-        # return result
     
     def optimize(self, init_params, *args):
         # solver = ProjectedGradient(self._min_obj, projection=projection_box)
         solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b")
         result = solver.run(init_params, (1e-3,jnp.inf), *args)
+
+        print(result)
 
         return result.params
         
@@ -291,6 +247,7 @@ class SparseGPR(BaseGPR):
         # added small positive diagonal to make the matrix positive definite
         fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
         fit_vector = K_MN@Y_data
+
 
         return fit_matrix, fit_vector
     

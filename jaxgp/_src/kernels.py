@@ -67,6 +67,16 @@ class RBF(BaseKernel):
         diff = (x1 - x2) / ls[0]
         return jnp.exp(-0.5 * jnp.dot(diff, diff))
     
+class Constant(BaseKernel):
+    def __init__(self, param_bounds=((1e-5, 1e5),)) -> None:
+        super().__init__()
+
+        self.num_params = 1
+        self.param_bounds = param_bounds
+
+    def eval_func(self, x1, x2, ls=(1.0,)):
+        return ls[0]
+    
 class Linear(BaseKernel):
     def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
         super().__init__()
