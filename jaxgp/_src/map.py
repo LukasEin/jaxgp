@@ -23,7 +23,7 @@ class MaximumAPosteriori:
         '''
         _, logdet = jnp.linalg.slogdet(fitmatrix)
         fitvector = fitvector.reshape(-1)
-        mle = -0.5*(logdet + fitvector.T@solve(fitmatrix,fitvector, assume_a="pos"))
+        mle = -0.5*(logdet + fitvector.T@solve(fitmatrix,fitvector))#, assume_a="pos"))
         prob_noise = self.noise_prior(params[0])
         prob_kernel = jnp.sum(self.kernel_prior(params[1:]))
 

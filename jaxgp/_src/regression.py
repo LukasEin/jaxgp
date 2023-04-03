@@ -6,6 +6,7 @@ from jaxopt import ScipyBoundedMinimize
 
 from .kernels import RBF
 from .map import MaximumAPosteriori
+from .linearoperators import LinearOperatorPPA, LinearOperatorNY, linsolve
 
 import time
 
@@ -25,8 +26,8 @@ class BaseGPR:
         self.data_split = jnp.array(data_split)
 
         # initialized variables to save from the fitting step
-        self._fit_vector = None
-        self._fit_matrix = None
+        self.Y_data = None
+        self.kernel_operator = None
         self.forward_args = []
 
         # optimizer
@@ -42,11 +43,13 @@ class BaseGPR:
             Thin wrapper with all side effects around the pure functions 
             self.optimize and self.forward that do the actual work.
         '''
+        self.Y_data = Y_data
+    
         sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
         self.forward_args.append(jnp.split(X_data, sum_splits))
 
         self.params = self.optimize(self.params, Y_data, *self.forward_args)
-        self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
+        self.kernel_operator = self.forward(self.params,*self.forward_args)
 
     def forward(self, params, Y_data, *args):
         raise NotImplementedError("Forward method not yet implemented!")
@@ -63,8 +66,10 @@ class BaseGPR:
             raise ValueError("GPR not correctly fitted!")
         
         if return_std:
+            return self.mean_std_eval(self.params, X, self.kernel_operator, self.Y_data, *self.forward_args)
             return self.mean_std_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
         
+        return self.mean_eval(self.params, X, self.kernel_operator, self.Y_data, *self.forward_args)
         return self.mean_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
     
     def mean_eval(self, params, X, fitmatrix, fitvector, *args):
@@ -78,7 +83,7 @@ class BaseGPR:
     
     def optimize(self, init_params, *args):
         # solver = ProjectedGradient(self._min_obj, projection=projection_box)
-        solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b")
+        solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b", jit=False)
         result = solver.run(init_params, (1e-3,jnp.inf), *args)
 
         print(result)
@@ -236,7 +241,7 @@ class SparseGPR(BaseGPR):
         self.forward_args = [X_ref, ]
 
     @partial(jit, static_argnums=(0,))
-    def forward(self, params, Y_data, X_ref, X_split):
+    def forward(self, params, X_ref, X_split):
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):
             K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
@@ -245,32 +250,33 @@ class SparseGPR(BaseGPR):
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
             
         # added small positive diagonal to make the matrix positive definite
-        fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
-        fit_vector = K_MN@Y_data
+        # fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
+        # fit_vector = K_MN@Y_data
+        kernel_operator = LinearOperatorPPA(K_MN, K_ref, params[0])
 
 
-        return fit_matrix, fit_vector
+        return kernel_operator#, fit_vector
     
     @partial(jit, static_argnums=(0,))
-    def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
+    def mean_eval(self, params, X, kernel_operator, Y_data, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = ref_vectors@solve(kernel_operator,Y_data)#,assume_a="pos")
         
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
+    def mean_std_eval(self, params, X, kernel_operator, Y_data, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = ref_vectors@solve(kernel_operator,Y_data)#,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
         first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
-        second_temp = params[0]**2 * self._build_xTAx(fitmatrix, ref_vectors)
+        second_temp = params[0]**2 * self._build_xTAx(kernel_operator, ref_vectors)
         
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
         
@@ -285,6 +291,7 @@ class SparseGPR(BaseGPR):
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
-        fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN, assume_a="pos")
+        # fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
+        fitmatrix = LinearOperatorNY(K_MN, K_ref, params[0])
 
-        return -self.mle.forward(params, fitmatrix, Y_data) / 5000.0
+        return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0
