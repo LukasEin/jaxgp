@@ -6,7 +6,7 @@ from jaxopt import ScipyBoundedMinimize
 
 from .kernels import RBF
 from .map import MaximumAPosteriori
-from .linearoperators import LinearOperatorPPA, LinearOperatorNY, linsolve
+from .linearoperators import LinearOperatorPPA, LinearOperatorNY, LinearOperatorFull, linsolve
 
 import time
 
@@ -51,7 +51,7 @@ class BaseGPR:
         self.params = self.optimize(self.params, Y_data, *self.forward_args)
         self.kernel_operator = self.forward(self.params,*self.forward_args)
 
-    def forward(self, params, Y_data, *args):
+    def forward(self, params, *args):
         raise NotImplementedError("Forward method not yet implemented!")
     
     def eval(self, X, return_std=False):
@@ -62,7 +62,7 @@ class BaseGPR:
             Thin wrapper with all side effects around the pure function 
             self.eval that does the actual work.
         '''
-        if self._fit_matrix is None or self._fit_vector is None:
+        if self.kernel_operator is None or self.Y_data is None:
             raise ValueError("GPR not correctly fitted!")
         
         if return_std:
@@ -103,7 +103,7 @@ class BaseGPR:
 
             Calculates x.T@A^-1@x for each of the N x in X (x.shape = (M,)).
         '''
-        return X.T@solve(A,X,assume_a="pos")
+        return X.T@linsolve(A,X)#,assume_a="pos")
     
     # @partial(jit, static_argnums=(0,))
     # @partial(vmap, in_axes=(None,0))
@@ -179,7 +179,7 @@ class ExactGPR(BaseGPR):
         self.forward_args = []
 
     @partial(jit, static_argnums=(0))
-    def forward(self, params, Y_data, X_split):
+    def forward(self, params, X_split):
         # Build the full covariance Matrix between all datapoints in X_data depending on if they   
         # represent function evaluations or derivative evaluations
         K_NN = self._CovMatrix_Kernel(X_split[0], X_split[0], params=params[1:])
@@ -198,38 +198,38 @@ class ExactGPR(BaseGPR):
 
         # additional small diagonal element added for 
         # numerical stability of the inversion and determinant
-        return (jnp.eye(len(K_NN)) * (params[0]**2 + 1e-6) + K_NN), (Y_data)
+        return LinearOperatorFull(K_NN, params[0])
     
     @partial(jit, static_argnums=(0,))
-    def mean_eval(self, params, X, fitmatrix, fitvector, X_split):
+    def mean_eval(self, params, X, kernel_operator, Y_data, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
-        means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = full_vectors@linsolve(kernel_operator,Y_data)#,assume_a="pos")
         
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_split):
+    def mean_std_eval(self, params, X, kernel_operator, Y_data, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
             deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
-        means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = full_vectors@linsolve(kernel_operator,Y_data)#,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])  
-        temp = self._build_xTAx(fitmatrix, full_vectors)      
+        temp = self._build_xTAx(kernel_operator, full_vectors)      
         stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
         
         return means, stds
 
     @partial(jit, static_argnums=(0))
-    def _min_obj(self, params, *args):
-        fitmatrix, fitvector = self.forward(params, *args)
-        return -self.mle.forward(params, fitmatrix, fitvector) / 5000.0
+    def _min_obj(self, params, Y_data, X_split):
+        kernel_operator = self.forward(params, X_split)
+        return -self.mle.forward(params, kernel_operator, Y_data) / 5000.0
 
 class SparseGPR(BaseGPR):
     def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, noise_prior=None, kernel_prior=None) -> None:
@@ -252,30 +252,29 @@ class SparseGPR(BaseGPR):
         # added small positive diagonal to make the matrix positive definite
         # fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
         # fit_vector = K_MN@Y_data
-        kernel_operator = LinearOperatorPPA(K_MN, K_ref, params[0])
 
-
-        return kernel_operator#, fit_vector
+        return LinearOperatorPPA(K_MN, K_ref, params[0]+1e-6)#, fit_vector
     
     @partial(jit, static_argnums=(0,))
     def mean_eval(self, params, X, kernel_operator, Y_data, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(kernel_operator,Y_data)#,assume_a="pos")
+        means = ref_vectors@linsolve(kernel_operator,Y_data)#,assume_a="pos")
         
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, kernel_operator, Y_data, X_ref, X_split):
+    def mean_std_eval(self, params, X, kernel_operator: LinearOperatorPPA, Y_data, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(kernel_operator,Y_data)#,assume_a="pos")
+        means = ref_vectors@linsolve(kernel_operator,Y_data)#,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])
 
-        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
+        # K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
+        K_ref = LinearOperatorFull(kernel_operator.K_MM, 1e-6)
 
-        first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
+        first_temp = self._build_xTAx(K_ref, ref_vectors)
         second_temp = params[0]**2 * self._build_xTAx(kernel_operator, ref_vectors)
         
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
@@ -292,6 +291,6 @@ class SparseGPR(BaseGPR):
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
         # fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
-        fitmatrix = LinearOperatorNY(K_MN, K_ref, params[0])
+        kernel_operator = LinearOperatorNY(K_MN, K_ref, params[0]+1e-6)
 
-        return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0
+        return -self.mle.forward(params, kernel_operator, Y_data) / 20000.0
