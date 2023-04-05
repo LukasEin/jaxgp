@@ -65,7 +65,8 @@ class RBF(BaseKernel):
                 if lenghtscale should be (n_features,) must create new kernel
         '''
         diff = (x1 - x2) / ls[0]
-        return jnp.exp(-0.5 * jnp.dot(diff, diff))
+        # return jnp.exp(-0.5 * diff@diff)
+        return jnp.exp(-0.5 * jnp.inner(diff, diff))
     
 class Constant(BaseKernel):
     def __init__(self, param_bounds=((1e-5, 1e5),)) -> None:
