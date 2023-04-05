@@ -289,7 +289,7 @@ class SparseGPR(BaseGPR):
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
             
         # added small positive diagonal to make the matrix positive definite
-        fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-6
+        fit_matrix = params[0]**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-4
         fit_vector = K_MN@Y_data
 
         return fit_matrix, fit_vector
@@ -298,7 +298,7 @@ class SparseGPR(BaseGPR):
     def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = ref_vectors@solve(fitmatrix,fitvector)#,assume_a="pos")
         
         return means
     
@@ -306,13 +306,13 @@ class SparseGPR(BaseGPR):
     def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
-        means = ref_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+        means = ref_vectors@solve(fitmatrix,fitvector)#,assume_a="pos")
 
         X_cov = self._build_cov_vector(X, params[1:])
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
-        first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
+        first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-4, ref_vectors)
         second_temp = params[0]**2 * self._build_xTAx(fitmatrix, ref_vectors)
         
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
@@ -327,7 +327,8 @@ class SparseGPR(BaseGPR):
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
+        K_ref += jnp.eye(len(K_ref))*1e-4
 
-        fitmatrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN, assume_a="pos")
+        fitmatrix = jnp.eye(len(Y_data)) * (1e-4 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
 
-        return -self.mle.forward(params, fitmatrix, Y_data) / 5000.0
+        return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0
