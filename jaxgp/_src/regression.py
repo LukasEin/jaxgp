@@ -54,29 +54,9 @@ class BaseGPR:
         solver = ScipyBoundedMinimize(fun=self._negativeLogLikelyhood, method="l-bfgs-b")
         result = solver.run(init_params, (1e-3,jnp.inf), *args)
 
-        # print(result)
+        print(result)
 
         return result.params
-    
-    # @partial(vmap, in_axes=(None, None, 0))
-    # def _build_xTAx(self, A, X):
-    #     '''
-    #         X.shape = (N,M)
-    #         A.shape = (M,M)
-    #         output.shape = (N,)
-    #         Calculates x.T@A^-1@x for each of the N x in X (x.shape = (M,)).
-    #     '''
-    #     return X.T@solve(A,X,assume_a="pos")
-    
-    # def _build_cov_vector(self, X, params):
-    #     '''
-    #         X1.shape = (N, n_features)
-    #         output.shape = (N,)
-    #         Builds a vector of the covariance of all X[:,i] with them selves.
-    #     '''
-    #     func = lambda A: self.kernel.eval_func(A, A, params)
-    #     func = vmap(func, in_axes=(0))
-    #     return func(X)
 
     def _CovVector_Kernel(self, x, X, params):
         func = lambda A, B: self.kernel.eval_func(A, B, params)
@@ -210,34 +190,6 @@ class ExactGPR(BaseGPR):
         var = cov_x - cov_vector@solve(fit_matrix, cov_vector)
         return mean, jnp.sqrt(var)
     
-    # @partial(jit, static_argnums=(0,))
-    # def _meanstd_multi(self, X, params, fitmatrix, fitvector, X_split):
-    #     '''
-    #         calculates the posterior mean & std for a set of points X
-
-    #         x.shape = (n_features,)
-    #         X_split.shape = List[(N_i, n_features)]
-    #             ... training data split into function evaluations and the different derivative evaluations
-    #     '''
-    #     # calculates covariance between x and all points in X_data 
-    #     # depending on if the represent derivative or function evaluation
-    #     full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
-    #     for i,elem in enumerate(X_split[1:]):
-    #         deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
-    #         full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
-            
-    #     # calculates the covariance of X with itself
-    #     X_cov = self._build_cov_vector(X, params[1:])  
-
-
-    #     # calculates the full gp mean and standard deviation
-    #     # mean = jnp.inner(cov_vector, solve(fit_matrix, fit_vector))
-    #     # var = cov_x - jnp.inner(cov_vector, solve(fit_matrix, cov_vector))
-    #     means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos") 
-    #     temp = self._build_xTAx(fitmatrix, full_vectors)     
-    #     stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
-    #     return means, stds
-    
     @partial(jit, static_argnums=(0,))
     def _negativeLogLikelyhood(self, params, Y_data, small_coeff, X_split) -> float:
         '''
@@ -265,50 +217,6 @@ class ExactGPR(BaseGPR):
         mle = logdet + Y_data@solve(fit_matrix, Y_data)
         
         return mle * small_coeff
-    
-    # @partial(jit, static_argnums=(0,))
-    # def _mean(self, x, params, fit_matrix, fit_vector, X_split):
-    #     '''
-    #         calculates the posterior mean for a single point x
-
-    #         x.shape = (n_features,)
-    #         X_split.shape = List[(N_i, n_features)]
-    #             ... training data split into function evaluations and the different derivative evaluations
-    #     '''
-    #     # calculate covariance between x and all points in X_data 
-    #     # depending on if the represent derivative or function evaluation
-    #     cov_vector = self._CovVector_Kernel(x, X_split[0], params=params[1:])
-    #     for i, elem in enumerate(X_split[1:]):
-    #         temp = self._CovVector_Grad(x, elem, index=i, params=params[1:])
-    #         cov_vector = jnp.hstack((cov_vector, temp))
-
-    #     # calculates the full gp mean
-    #     mean = cov_vector@solve(fit_matrix, fit_vector)
-    #     return mean
-    
-    # @partial(jit, static_argnums=(0,))
-    # def _std(self, x, params, fit_matrix, X_split):
-    #     '''
-    #         calculates the posterior std for a single point x
-
-    #         x.shape = (n_features,)
-    #         X_split.shape = List[(N_i, n_features)]
-    #             ... training data split into function evaluations and the different derivative evaluations
-    #     '''
-    #     # calculates covariance between x and all points in X_data 
-    #     # depending on if the represent derivative or function evaluation
-    #     cov_vector = self._CovVector_Kernel(x, X_split[0], params=params[1:])
-    #     for i, elem in enumerate(X_split[1:]):
-    #         temp = self._CovVector_Grad(x, elem, index=i, params=params[1:])
-    #         cov_vector = jnp.hstack((cov_vector, temp))
-
-    #     # calculates the covariance of x with itself
-    #     cov_x = self.kernel.eval_func(x,x,params[1:])
-
-    #     # calculates the full gp standard deviation
-    #     # var = cov_x - jnp.inner(cov_vector, solve(fit_matrix, cov_vector))
-    #     var = cov_x - cov_vector@solve(fit_matrix, cov_vector)
-    #     return jnp.sqrt(var)
     
 class SparseGPR(BaseGPR):
     def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, noise_prior=None, kernel_prior=None) -> None:
@@ -387,29 +295,6 @@ class SparseGPR(BaseGPR):
         
         return mean, jnp.sqrt(var)
     
-    # @partial(jit, static_argnums=(0,))
-    # def _meanstd_multi(self, X, params, fitmatrix, fitvector, X_ref):
-    #     '''
-    #         calculates the posterior mean and std for a set of points X
-    #     '''
-    #     # calculates covariance between new points and reference points
-    #     ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
-
-    #     # calculates covariance of the new points with themselves
-    #     X_cov = self._build_cov_vector(X, params[1:])
-
-    #     # calculates covariance between the reference points
-    #     K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
-    #     # add a small positive value to the diagonal for numerical stability
-    #     first_temp = self._build_xTAx(K_ref + jnp.eye(len(X_ref)) * 1e-6, ref_vectors)
-    #     second_temp = params[0]**2 * self._build_xTAx(fitmatrix, ref_vectors)
-        
-    #     # calculate mean and variance according to PPA
-    #     means = ref_vectors@solve(fitmatrix,fitvector)
-    #     stds = jnp.sqrt(X_cov - first_temp + second_temp)
-        
-    #     return means, stds
-    
     @partial(jit, static_argnums=(0,))
     def _negativeLogLikelyhood(self, params, Y_data, small_coeff, X_ref, X_split) -> float:
         '''
@@ -446,49 +331,3 @@ class SparseGPR(BaseGPR):
                         Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / params[0]**2
         
         return mle * small_coeff
-    
-    # @partial(jit, static_argnums=(0,))
-    # def _mean(self, x, params, fitmatrix, fitvector, X_ref) -> Array:
-    #     '''
-    #         calculates the posterior mean for a single point x
-
-    #         x.shape = (n_features,)
-    #         X_ref.shape = (n_refs, n_features)
-    #     '''
-    #     # vectorizes function over the n_refs dimension of X_ref
-    #     f = vmap(lambda x, X: self.kernel.eval_func(x,X, params[1:]), in_axes=(None, 0))
-    #     # calculates covariance between new point and reference points
-    #     ref_vector = f(x,X_ref)
-        
-    #     # calculate mean according to PPA
-    #     # mean = jnp.inner(ref_vector, solve(fitmatrix,fitvector))
-    #     mean = ref_vector@solve(fitmatrix,fitvector)
-
-    #     return mean
-    
-    # @partial(jit, static_argnums=(0,))
-    # def _std(self, x, params, fitmatrix, X_ref) -> Array:
-    #     '''
-    #         calculates the posterior std for a single point x
-
-    #         x.shape = (n_features,)
-    #         X_ref.shape = (n_refs, n_features)
-    #     '''
-    #     # vectorizes function over the n_refs dimension of X_ref
-    #     f = vmap(lambda x, X: self.kernel.eval_func(x,X, params[1:]), in_axes=(None, 0))
-    #     # calculates covariance between new point and reference points
-    #     ref_vector = f(x,X_ref)
-
-    #     # calculates covariance of the new point with itself
-    #     cov_x = self.kernel.eval_func(x,x, params[1:])
-
-    #     # calculates covariance between the reference points
-    #     K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
-
-    #     # calculate variance according to PPA
-    #     # var = cov_x - jnp.inner(ref_vector, solve(K_ref, ref_vector)) \
-    #     #         + params[0]**2 * jnp.inner(ref_vector, solve(fitmatrix, ref_vector))
-    #     var = cov_x - ref_vector@solve(K_ref, ref_vector) \
-    #             + params[0]**2 * (ref_vector@solve(fitmatrix, ref_vector))
-
-    #     return jnp.sqrt(var)
