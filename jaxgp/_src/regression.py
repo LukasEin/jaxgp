@@ -37,20 +37,49 @@ class BaseGPR:
                   or eval() to set a supported mode.")
 
     # setters for the different modes in which to call the class
-    def train_regression(self) -> None: self.mode = "regr"
-    def train_bayesopt(self) -> None: self.mode = "bays"
+    def train(self) -> None: self.mode = "regr"
+    def bayesopt(self) -> None: self.mode = "bays"
     def eval(self) -> None: self.mode = "eval"
 
     # "virtual" methods that are to be defined in derived class
     def _regression(self, *args, **kwargs): raise NotImplementedError("Function hasn't been implemented in derived class")
-    def _bayesopt(self, *args, **kwargs): raise NotImplementedError("Function hasn't been implemented in derived class")
     def _eval(self, *args, **kwargs): raise NotImplementedError("Function hasn't been implemented in derived class")
+    # bayesopt can be implemented here. Just needs to call the _meanstd method from the derived classes
+    def _bayesopt(self, X_init, Y_init, fun, num_iters):
+        # X_train = X_init
+        # Y_train = Y_init
+        #
+        # for i in range(num_iters):
+        #     X_split = split(X_train)
+        #     fit_matrix = forward() 
+        #           -> fit the gpr to the current data
+        #
+        #     best_new_point = maximize(acquisition_func(self._meanstd)) 
+        #           -> maximizes the acquisition function to find the new best point
+        #
+        #     X_train, Y_train, self.data_split = fun(best_new_point) 
+        #           -> adds the best new point at the correct spot and updates data_split
+
+        raise NotImplementedError
     
     def _negativeLogLikelyhood(self, params, *args):
         raise NotImplementedError("Forward method not yet implemented!")
     
+    def _kernelNegativeLogLikelyhood(self, params, *args):
+        raise NotImplementedError("Forward method not yet implemented!")
+    
     def optimize(self, init_params, *args):
         # solver = ProjectedGradient(self._min_obj, projection=projection_box)
+        noise = init_params[0]
+        kernel_params = init_params[1:]
+        solver = ScipyBoundedMinimize(fun=self._kernelNegativeLogLikelyhood, method="l-bfgs-b")
+        result = solver.run(kernel_params, (1e-3,jnp.inf), noise, *args)
+
+        print(result)
+
+        return jnp.insert(result.params, 0, noise)
+
+
         solver = ScipyBoundedMinimize(fun=self._negativeLogLikelyhood, method="l-bfgs-b")
         result = solver.run(init_params, (1e-3,jnp.inf), *args)
 
@@ -133,9 +162,6 @@ class ExactGPR(BaseGPR):
         self.fit_matrix = self.forward(self.params, self.X_split)
         self.fit_vector = Y_data
 
-    def _bayesopt(self):
-        raise NotImplementedError
-
     def _eval(self, X: Array) -> Tuple[Array, Array]:
         '''
             Evaluate the posterior mean and standard deviation at each point in X
@@ -207,6 +233,35 @@ class ExactGPR(BaseGPR):
             result is multiplied with a small coefficient for numerical stability 
                 of the optimizer
         '''
+        # calculates the full covariance matrix
+        fit_matrix = self.forward(params, X_split)
+
+        # calculates the logdet of the full covariance matrix
+        _, logdet = jnp.linalg.slogdet(fit_matrix)
+
+        # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        mle = logdet + Y_data@solve(fit_matrix, Y_data)
+        
+        return mle * small_coeff
+    
+    @partial(jit, static_argnums=(0,))
+    def _kernelNegativeLogLikelyhood(self, kernel_params, noise, Y_data, small_coeff, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_NN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 - K_NN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        params = jnp.insert(kernel_params, 0, noise)
         # calculates the full covariance matrix
         fit_matrix = self.forward(params, X_split)
 
@@ -329,5 +384,42 @@ class SparseGPR(BaseGPR):
         invert_matrix = K_ref*params[0]**2 + K_MN@K_MN.T
         mle = logdet + (Y_data@Y_data -
                         Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / params[0]**2
+        
+        return mle * small_coeff
+    
+    @partial(jit, static_argnums=(0,))
+    def _kernelNegativeLogLikelyhood(self, kernel_params, noise, Y_data, small_coeff, X_ref, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 + K_MN.T@K_MM**(-1)@K_MN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        # calculates the covariance between the data and the reference points
+        K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], kernel_params)
+        for i,elem in enumerate(X_split[1:]):
+            K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=kernel_params)
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+        # calculates the covariance between the reference points
+        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=kernel_params)
+
+        # directly calculates the logdet of the Nystrom covariance matrix
+        log_matrix = jnp.eye(len(Y_data)) * (1e-6 + noise**2) + K_MN.T@solve(K_ref,K_MN)
+        _, logdet = jnp.linalg.slogdet(log_matrix)
+
+        # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        invert_matrix = K_ref*noise**2 + K_MN@K_MN.T
+        mle = logdet + (Y_data@Y_data -
+                        Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2
         
         return mle * small_coeff
