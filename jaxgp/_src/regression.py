@@ -9,7 +9,7 @@ from .map import MaximumAPosteriori
 
 
 class BaseGPR:
-    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, noise_prior=None, kernel_prior=None) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
         '''
             supported kernels are found in gaussion_process.kernels
 
@@ -19,16 +19,21 @@ class BaseGPR:
             noise_var : float           ... assumed noise in the evaluation of data
         '''
         self.kernel = kernel
-        self.params = jnp.array((noise,) + init_kernel_params)
         self.data_split = jnp.array(data_split)
 
+        # defines parameters of the regressor and sets flag for optimizing the noise parameter as well
+        self.optimize_noise = optimize_noise
+        self.kernel_params = init_kernel_params
+        self.noise = noise
+        self.params = jnp.array((noise,) + init_kernel_params)
+
         # initialized variables to save from the fitting step
-        self._fit_vector = None
-        self._fit_matrix = None
+        self.fit_vector = None
+        self.fit_matrix = None
         self.forward_args = []
 
         # optimizer
-        self.mle = MaximumAPosteriori()
+        # self.mle = MaximumAPosteriori()
 
     def train(self, X_data, Y_data) -> None:
         '''
@@ -43,8 +48,8 @@ class BaseGPR:
         sum_splits = [jnp.sum(self.data_split[:i+1]) for i,_ in enumerate(self.data_split[1:])]
         self.forward_args.append(jnp.split(X_data, sum_splits))
 
-        self.params = self.optimize(self.params, Y_data, *self.forward_args)
-        self._fit_matrix, self._fit_vector = self.forward(self.params, Y_data, *self.forward_args)
+        self.optimize(Y_data, *self.forward_args)
+        self.fit_matrix, self.fit_vector = self.forward(self.params, Y_data, *self.forward_args)
 
     def forward(self, params, Y_data, *args):
         raise NotImplementedError("Forward method not yet implemented!")
@@ -57,81 +62,31 @@ class BaseGPR:
             Thin wrapper with all side effects around the pure function 
             self.eval that does the actual work.
         '''
-        if self._fit_matrix is None or self._fit_vector is None:
+        if self.fit_matrix is None or self.fit_vector is None:
             raise ValueError("GPR not correctly fitted!")
         
         if return_std:
-            return self.mean_std_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
+            return self._meanstd(self.params, X, self.fit_matrix, self.fit_vector, *self.forward_args)
         
-        return self.mean_eval(self.params, X, self._fit_matrix, self._fit_vector, *self.forward_args)
+        return self._mean(self.params, X, self.fit_matrix, self.fit_vector, *self.forward_args)
     
-    def mean_eval(self, params, X, fitmatrix, fitvector, *args):
-        raise NotImplementedError("Forward method not yet implemented!")
-        
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, *args):
-        raise NotImplementedError("Forward method not yet implemented!")
+    def _mean(self, params, *args, **kwargs): raise NotImplementedError
+    def _meanstd(self, params, *args, **kwargs): raise NotImplementedError
+    def _negativeLogLikelyhood(self, params, *args, **kwargs): raise NotImplementedError
+    def _kernelNegativeLogLikelyhood(self, params, *args, **kwargs): raise NotImplementedError
     
-    def _min_obj(self, params, *args):
-        raise NotImplementedError("Forward method not yet implemented!")
- 
-    # @partial(jit, static_argnums=(0))
-    def testfunction(self, init_params, *args):
-        # num_steps = 80
+    def optimize(self, *args) -> None:
+        if self.optimize_noise:
+            solver = ScipyBoundedMinimize(fun=self._negativeLogLikelyhood, method="l-bfgs-b")
+            result = solver.run(self.params, (1e-3,jnp.inf), *args)
 
-        # minimum = jnp.array([jnp.inf, jnp.inf, jnp.inf])
+            self.params = result.params
+        else:
+            solver = ScipyBoundedMinimize(fun=self._kernelNegativeLogLikelyhood, method="l-bfgs-b")
+            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.noise, *args)
 
-        # grid = jnp.linspace(1e-4, 5.0, num_steps)
-
-        # for noise in grid:
-        #     for ls in grid:
-        #         next_try = self._min_obj(jnp.array([noise, ls]), *args)
-        #         minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, noise, ls]), minimum)
-        
-        num_steps = 50
-        grid = jnp.linspace(1e-4, 3.0, num_steps)
-
-        best_params = jnp.array(init_params)
-        old_params = jnp.ones_like(best_params)*jnp.inf
-
-        while(jnp.sum(jnp.abs(old_params-best_params)) > 1e-3):
-            old_params = best_params
-
-            new_params = []
-
-            for i,_ in enumerate(best_params):
-                minimum = jnp.array([jnp.inf, jnp.inf])
-
-                for param in grid:
-                    next_try = self._min_obj(jnp.array([*best_params[:i], param, *best_params[i+1:]]), *args)
-                    minimum = jnp.where(next_try < minimum[0], jnp.array([next_try, param]), minimum)
-
-                new_params.append(minimum[1])
-
-            best_params = (jnp.array(new_params) + best_params) / 2
-            # print(f"{old_params=}", f"{best_params=}")
-        
-
-        return best_params
-        # def loop_ls(i, val):
-        #     temp = self._min_obj(jnp.array([*left_params, 0.05*i, *right_params]), *args)
-        #     return jnp.where(val[1] < temp, val, jnp.array([0.05*i,temp]))
-        
-        # val = jnp.array([0.0, self._min_obj(jnp.array([*left_params, 1e-4, *right_params]), *args)])
-        
-        # result = fori_loop(1, 100, loop_ls, val)
-
-        # return result
+            self.params = jnp.array((self.noise, ) + result.params)
     
-    def optimize(self, init_params, *args):
-        # solver = ProjectedGradient(self._min_obj, projection=projection_box)
-        solver = ScipyBoundedMinimize(fun=self._min_obj, method="l-bfgs-b")
-        result = solver.run(init_params, (1e-3,jnp.inf), *args)
-
-        return result.params
-        
-        raise ValueError("Optimization failed!")
-    
-    # @partial(jit, static_argnums=(0,))
     @partial(vmap, in_axes=(None, None, 0))
     def _build_xTAx(self, A, X):
         '''
@@ -144,9 +99,7 @@ class BaseGPR:
         '''
         return X.T@solve(A,X,assume_a="pos")
     
-    # @partial(jit, static_argnums=(0,))
-    # @partial(vmap, in_axes=(None,0))
-    def _build_cov_vector(self, X, params):
+    def _CovVector_Id(self, X, params):
         '''
             X1.shape = (N, n_features)
 
@@ -158,7 +111,6 @@ class BaseGPR:
         func = vmap(func, in_axes=(0))
         return func(X)
 
-    # @partial(jit, static_argnums=(0,))
     def _CovMatrix_Kernel(self, X1, X2, params):
         '''
             X1.shape = (N1, n_features)
@@ -173,8 +125,7 @@ class BaseGPR:
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
         return func(X1, X2)
     
-    # @partial(jit, static_argnums=(0,))
-    def _CovMatrix_KernelGrad(self, X1, X2, index, params):
+    def _CovMatrix_Grad(self, X1, X2, index, params):
         '''
             X1.shape = (N1, n_features)
             X2.shape = (N2, n_features)
@@ -192,8 +143,7 @@ class BaseGPR:
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
         return func(X1, X2)
     
-    # @partial(jit, static_argnums=(0,))
-    def _CovMatrix_KernelHess(self, X1, X2, index_1, index_2, params):
+    def _CovMatrix_Hess(self, X1, X2, index_1, index_2, params):
         '''
             X1.shape = (N1, n_features)
             X2.shape = (N2, n_features)
@@ -212,8 +162,8 @@ class BaseGPR:
         return func(X1, X2)
 
 class ExactGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4, *, noise_prior=None, kernel_prior=None) -> None:
-        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior)
+    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
+        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior, optimize_noise=optimize_noise)
 
         self.forward_args = []
 
@@ -223,14 +173,14 @@ class ExactGPR(BaseGPR):
         # represent function evaluations or derivative evaluations
         K_NN = self._CovMatrix_Kernel(X_split[0], X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
-            K_mix = self._CovMatrix_KernelGrad(X_split[0], elem, index=i, params=params[1:])
+            K_mix = self._CovMatrix_Grad(X_split[0], elem, index=i, params=params[1:])
             K_NN = jnp.concatenate((K_NN,K_mix),axis=1)
         
         for i,elem_1 in enumerate(X_split[1:]):
-            K_mix = self._CovMatrix_KernelGrad(X_split[0], elem_1, index=i, params=params[1:])
+            K_mix = self._CovMatrix_Grad(X_split[0], elem_1, index=i, params=params[1:])
 
             for j,elem_2 in enumerate(X_split[1:]):
-                K_derivs = self._CovMatrix_KernelHess(elem_1, elem_2, index_1=i, index_2=j, params=params[1:])
+                K_derivs = self._CovMatrix_Hess(elem_1, elem_2, index_1=i, index_2=j, params=params[1:])
                 K_mix = jnp.concatenate((K_mix,K_derivs),axis=0)
 
             K_NN = jnp.concatenate((K_NN,K_mix.T),axis=0)
@@ -240,10 +190,10 @@ class ExactGPR(BaseGPR):
         return (jnp.eye(len(K_NN)) * (params[0]**2 + 1e-6) + K_NN), (Y_data)
     
     @partial(jit, static_argnums=(0,))
-    def mean_eval(self, params, X, fitmatrix, fitvector, X_split):
+    def _mean(self, params, X, fitmatrix, fitvector, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
-            deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
+            deriv_vectors = self._CovMatrix_Grad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
         means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
@@ -251,31 +201,90 @@ class ExactGPR(BaseGPR):
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_split):
+    def _meanstd(self, params, X, fitmatrix, fitvector, X_split):
         full_vectors = self._CovMatrix_Kernel(X, X_split[0], params=params[1:])
         for i,elem in enumerate(X_split[1:]):
-            deriv_vectors = self._CovMatrix_KernelGrad(X, elem, index=i, params=params[1:])
+            deriv_vectors = self._CovMatrix_Grad(X, elem, index=i, params=params[1:])
             full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
 
         means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
 
-        X_cov = self._build_cov_vector(X, params[1:])  
+        X_cov = self._CovVector_Id(X, params[1:])  
         temp = self._build_xTAx(fitmatrix, full_vectors)      
         stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
         
         return means, stds
 
+    # @partial(jit, static_argnums=(0))
+    # def _negativeLogLikelyhood(self, params, *args):
+    #     fitmatrix, fitvector = self.forward(params, *args)
+    #     return -self.mle.forward(params, fitmatrix, fitvector) / 20000.0
+
     @partial(jit, static_argnums=(0))
-    def _min_obj(self, params, *args):
-        fitmatrix, fitvector = self.forward(params, *args)
-        return -self.mle.forward(params, fitmatrix, fitvector) / 5000.0
+    def _negativeLogLikelyhood(self, params, Y_data, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_NN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 - K_NN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        # calculates the full covariance matrix
+        fit_matrix, fit_vector = self.forward(params, Y_data, X_split)
+        fit_vector = fit_vector.reshape(-1)
+
+        # calculates the logdet of the full covariance matrix
+        _, logdet = jnp.linalg.slogdet(fit_matrix)
+
+        # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        mle = logdet + fit_vector@solve(fit_matrix, fit_vector, assume_a="pos")
+        
+        return mle / 20000.0
+    
+    @partial(jit, static_argnums=(0,))
+    def _kernelNegativeLogLikelyhood(self, kernel_params, noise, Y_data, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_NN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 - K_NN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        params = jnp.array((noise,) + kernel_params)
+        # calculates the full covariance matrix
+        fit_matrix, fit_vector = self.forward(params, Y_data, X_split)
+        fit_vector = fit_vector.reshape(-1)
+
+        # calculates the logdet of the full covariance matrix
+        _, logdet = jnp.linalg.slogdet(fit_matrix)
+
+        # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        mle = logdet + fit_vector@solve(fit_matrix, fit_vector, assume_a="pos")
+        
+        return mle / 20000.0
 
 class SparseGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, noise_prior=None, kernel_prior=None) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
         '''
             Sparsifies the full GP regressor by the Projected Process Approximation.
         '''
-        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior)
+        super().__init__(kernel, data_split, kernel_params, noise, noise_prior=noise_prior, kernel_prior=kernel_prior, optimize_noise=optimize_noise)
 
         self.forward_args = [X_ref, ]
 
@@ -283,7 +292,7 @@ class SparseGPR(BaseGPR):
     def forward(self, params, Y_data, X_ref, X_split):
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):
-            K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
+            K_deriv = self._CovMatrix_Grad(X_ref, elem, index=i, params=params[1:])
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
@@ -295,7 +304,7 @@ class SparseGPR(BaseGPR):
         return fit_matrix, fit_vector
     
     @partial(jit, static_argnums=(0,))
-    def mean_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
+    def _mean(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
         means = ref_vectors@solve(fitmatrix,fitvector)#,assume_a="pos")
@@ -303,12 +312,12 @@ class SparseGPR(BaseGPR):
         return means
     
     @partial(jit, static_argnums=(0,))
-    def mean_std_eval(self, params, X, fitmatrix, fitvector, X_ref, X_split):
+    def _meanstd(self, params, X, fitmatrix, fitvector, X_ref, X_split):
         ref_vectors = self._CovMatrix_Kernel(X, X_ref, params[1:])
 
         means = ref_vectors@solve(fitmatrix,fitvector)#,assume_a="pos")
 
-        X_cov = self._build_cov_vector(X, params[1:])
+        X_cov = self._CovVector_Id(X, params[1:])
 
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
 
@@ -319,16 +328,88 @@ class SparseGPR(BaseGPR):
         
         return means, stds
 
-    @partial(jit, static_argnums=(0))
-    def _min_obj(self, params, Y_data, X_ref, X_split):
+    # @partial(jit, static_argnums=(0))
+    # def _negativeLogLikelyhood(self, params, Y_data, X_ref, X_split):
+    #     K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
+    #     for i,elem in enumerate(X_split[1:]):
+    #         K_deriv = self._CovMatrix_Grad(X_ref, elem, index=i, params=params[1:])
+    #         K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+    #     K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
+    #     K_ref += jnp.eye(len(K_ref))*1e-4
+
+    #     fitmatrix = jnp.eye(len(Y_data)) * (1e-4 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
+
+    #     return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0@partial(jit, static_argnums=(0,))
+    def _negativeLogLikelyhood(self, params, Y_data, X_ref, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 + K_MN.T@K_MM**(-1)@K_MN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        # calculates the covariance between the data and the reference points
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):
-            K_deriv = self._CovMatrix_KernelGrad(X_ref, elem, index=i, params=params[1:])
+            K_deriv = self._CovMatrix_Grad(X_ref, elem, index=i, params=params[1:])
             K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
 
+        # calculates the covariance between the reference points
         K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
-        K_ref += jnp.eye(len(K_ref))*1e-4
 
-        fitmatrix = jnp.eye(len(Y_data)) * (1e-4 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
+        # directly calculates the logdet of the Nystrom covariance matrix
+        log_matrix = jnp.eye(len(Y_data)) * (1e-6 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)
+        _, logdet = jnp.linalg.slogdet(log_matrix)
 
-        return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0
+        # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        invert_matrix = K_ref*params[0]**2 + K_MN@K_MN.T
+        mle = logdet + (Y_data@Y_data -
+                        Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / params[0]**2
+        
+        return mle / 20000.0
+    
+    @partial(jit, static_argnums=(0,))
+    def _kernelNegativeLogLikelyhood(self, kernel_params, noise, Y_data, X_ref, X_split) -> float:
+        '''
+            for PPA the Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN])
+                which is the same as for Nystrom approximation
+
+            The negative log likelyhood estimate is calculated according 
+                to this distribution.
+
+            Everything that is unnecessary to calculate the minimum has been removed
+
+            Formally calculates:
+            log(det(C)) + Y.T@C**(-1)@Y, C := id*s**2 + K_MN.T@K_MM**(-1)@K_MN
+
+            result is multiplied with a small coefficient for numerical stability 
+                of the optimizer
+        '''
+        # calculates the covariance between the data and the reference points
+        K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], kernel_params)
+        for i,elem in enumerate(X_split[1:]):
+            K_deriv = self._CovMatrix_Grad(X_ref, elem, index=i, params=kernel_params)
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+        # calculates the covariance between the reference points
+        K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=kernel_params)
+
+        # directly calculates the logdet of the Nystrom covariance matrix
+        log_matrix = jnp.eye(len(Y_data)) * (1e-6 + noise**2) + K_MN.T@solve(K_ref,K_MN)
+        _, logdet = jnp.linalg.slogdet(log_matrix)
+
+        # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+        invert_matrix = K_ref*noise**2 + K_MN@K_MN.T
+        mle = logdet + (Y_data@Y_data -
+                        Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2
+        
+        return mle / 20000.0
