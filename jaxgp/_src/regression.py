@@ -212,8 +212,8 @@ class ExactGPR(BaseGPR):
         cov_x = self.kernel.eval_func(x,x,params[1:])
 
         # calculates the full gp mean and standard deviation
-        mean = cov_vector@solve(fit_matrix, fit_vector)
-        var = cov_x - cov_vector@solve(fit_matrix, cov_vector)
+        mean = cov_vector@solve(fit_matrix, fit_vector, assume_a="pos")
+        var = cov_x - cov_vector@solve(fit_matrix, cov_vector, assume_a="pos")
         return mean, jnp.sqrt(var)
     
     @partial(jit, static_argnums=(0,))
@@ -240,7 +240,7 @@ class ExactGPR(BaseGPR):
         _, logdet = jnp.linalg.slogdet(fit_matrix)
 
         # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-        mle = logdet + Y_data@solve(fit_matrix, Y_data)
+        mle = logdet + Y_data@solve(fit_matrix, Y_data, assume_a="pos")
         
         return mle * small_coeff
     
@@ -269,7 +269,7 @@ class ExactGPR(BaseGPR):
         _, logdet = jnp.linalg.slogdet(fit_matrix)
 
         # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-        mle = logdet + Y_data@solve(fit_matrix, Y_data)
+        mle = logdet + Y_data@solve(fit_matrix, Y_data, assume_a="pos")
         
         return mle * small_coeff
     
