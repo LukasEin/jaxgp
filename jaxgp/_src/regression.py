@@ -10,7 +10,7 @@ from typing import Union, Tuple
 from .kernels import RBF
 
 class BaseGPR:
-    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
+    def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, optimize_noise=False) -> None:
         '''
             supported kernels are found in gaussion_process.kernels
 
@@ -32,9 +32,6 @@ class BaseGPR:
         self.fit_vector = None
         self.fit_matrix = None
         self.further_args = []
-
-        # TODO:
-        # add functionality to the prior distributions
 
     def train(self, X_data: Array, Y_data: Array) -> None:
         '''
@@ -228,11 +225,6 @@ class ExactGPR(BaseGPR):
         
         return means, stds
 
-    # @partial(jit, static_argnums=(0))
-    # def _negativeLogLikelyhood(self, params, *args):
-    #     fitmatrix, fitvector = self.forward(params, *args)
-    #     return -self.mle.forward(params, fitmatrix, fitvector) / 20000.0
-
     @partial(jit, static_argnums=(0))
     def _negativeLogLikelyhood(self, params: Array, Y_data: Array, X_split: list[Array]) -> float:
         '''
@@ -348,20 +340,7 @@ class SparseGPR(BaseGPR):
         stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
         
         return means, stds
-
-    # @partial(jit, static_argnums=(0))
-    # def _negativeLogLikelyhood(self, params, Y_data, X_ref, X_split):
-    #     K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
-    #     for i,elem in enumerate(X_split[1:]):
-    #         K_deriv = self._CovMatrix_Grad(X_ref, elem, index=i, params=params[1:])
-    #         K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
-
-    #     K_ref = self._CovMatrix_Kernel(X_ref, X_ref, params=params[1:])
-    #     K_ref += jnp.eye(len(K_ref))*1e-4
-
-    #     fitmatrix = jnp.eye(len(Y_data)) * (1e-4 + params[0]**2) + K_MN.T@solve(K_ref,K_MN)#, assume_a="pos")
-
-    #     return -self.mle.forward(params, fitmatrix, Y_data) / 20000.0@partial(jit, static_argnums=(0,))
+    
     def _negativeLogLikelyhood(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> float:
         '''
             for PPA the Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN])
