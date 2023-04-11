@@ -8,8 +8,6 @@ from jax import Array
 from typing import Union, Tuple
 
 from .kernels import RBF
-from .map import MaximumAPosteriori
-
 
 class BaseGPR:
     def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
