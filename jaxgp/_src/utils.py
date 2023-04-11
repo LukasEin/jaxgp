@@ -4,6 +4,8 @@ from jax.scipy.linalg import solve
 from functools import partial
 from .kernels import BaseKernel
 
+from typing import Tuple
+
 @partial(vmap, in_axes=(None, 0))
 def _build_xT_Ainv_x(A: Array, X: Array) -> Array:
     '''
@@ -99,3 +101,59 @@ def full_covariance_matrix(X_split: list[Array], noise, kernel: BaseKernel, para
     # additional small diagonal element added for 
     # numerical stability of the inversion and determinant
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
+
+@jit
+def sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, params) -> Tuple[Array, Array]:
+        # calculates the covariance between the training points and the reference points
+        K_MN = _CovMatrix_Kernel(X_ref, X_split[0], kernel, params)
+        for i,elem in enumerate(X_split[1:]):
+            K_deriv = _CovMatrix_Grad(X_ref, elem, kernel, params=params, index=i)
+            K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+
+        # calculates the covariance between each pair of reference points
+        K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, params=params)
+            
+        # added small positive diagonal to make the matrix positive definite
+        fit_matrix = noise**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-4
+        fit_vector = K_MN@Y_data
+        return fit_matrix, fit_vector
+
+@jit
+def _meanstd(X: Array, fitmatrix: Array, fitvector: Array, X_split: Array, kernel, params: Array) -> Tuple[Array, Array]:
+        '''
+            calculates the posterior mean and std for all points in X
+        '''
+        full_vectors = _CovMatrix_Kernel(X, X_split[0], params=params[1:])
+        for i,elem in enumerate(X_split[1:]):
+            deriv_vectors = _CovMatrix_Grad(X, elem, index=i, params=params[1:])
+            full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
+
+        means = full_vectors@solve(fitmatrix,fitvector,assume_a="pos")
+
+        X_cov = _CovVector_Id(X, params[1:])  
+        temp = _build_xT_Ainv_x(fitmatrix, full_vectors)      
+        stds = jnp.sqrt(X_cov - temp) # no noise term in the variance
+        
+        return means, stds
+
+@jit
+def sparse_meanstd(X: Array, fitmatrix: Array, fitvector: Array, X_ref: Array, noise, kernel, params: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+    '''
+        calculates the posterior mean and std for all points in X
+    '''
+    # calculates the caovariance between the test points and the reference points
+    ref_vectors = _CovMatrix_Kernel(X, X_ref, kernel, params)
+
+    means = ref_vectors@solve(fitmatrix,fitvector)#,assume_a="pos")
+
+    X_cov = _CovVector_Id(X, kernel, params)
+
+    K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, params=params)
+
+    first_temp = _build_xT_Ainv_x(K_ref + jnp.eye(len(X_ref)) * 1e-4, ref_vectors)
+    second_temp = noise**2 * _build_xT_Ainv_x(fitmatrix, ref_vectors)
+    
+    stds = jnp.sqrt(X_cov - first_temp + second_temp) # no noise term in the variance
+    
+    return means, stds
+
