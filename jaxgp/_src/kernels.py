@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 class BaseKernel:
     def __init__(self) -> None:
-        self._df = jacrev(self.eval_func, argnums=1)
+        self._df = jacrev(self.eval, argnums=1)
         self._ddf = jacfwd(self._df, argnums=0)
 
         self.num_params = 0
@@ -15,10 +15,10 @@ class BaseKernel:
     def __mul__(self, other):
         return ProductKernel(self, other)
 
-    def eval_func(self, x1, x2, params):
+    def eval(self, x1, x2, params):
         raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval_func!")
     
-    def eval_dx2(self, x1, x2, index, params):
+    def grad2(self, x1, x2, index, params):
         '''
             returns the derivative of the Kernel w.r.t x2[index]
             x1.shape = (n_features,)
@@ -32,7 +32,7 @@ class BaseKernel:
         #     raise ValueError("Index missing!")
         return self._df(x1, x2, params)[index]
     
-    def eval_ddx1x2(self, x1, x2, index_1, index_2, params):
+    def jac(self, x1, x2, index_1, index_2, params):
         '''
             returns the double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
             x1.shape = (n_features,)
@@ -48,13 +48,12 @@ class BaseKernel:
         return self._ddf(x1, x2, params)[index_1, index_2]
 
 class RBF(BaseKernel):
-    def __init__(self, param_bounds=((1e-5, 1e5),)):
+    def __init__(self, num_params=1):
         super().__init__()
 
-        self.num_params = 1
-        self.param_bounds = param_bounds
+        self.num_params = num_params
     
-    def eval_func(self, x1, x2, ls=(1.0,)):
+    def eval(self, x1, x2, ls=(1.0,)):
         '''
             returns RBF(x1, x2)
             x1.shape = (n_features,)
@@ -64,17 +63,16 @@ class RBF(BaseKernel):
                 the second the length_scale
                 if lenghtscale should be (n_features,) must create new kernel
         '''
-        diff = (x1 - x2) / ls[0]
+        diff = (x1 - x2) / ls
         return jnp.exp(-0.5 * jnp.dot(diff, diff))
     
 class Linear(BaseKernel):
-    def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
+    def __init__(self, num_params=2):
         super().__init__()
 
-        self.num_params = 2
-        self.param_bounds = param_bounds
+        self.num_params = num_params
 
-    def eval_func(self, x1, x2, params=(1.0, 0.0)):
+    def eval(self, x1, x2, params=(1.0, 0.0)):
         '''
             returns Linear(x1, x2)
             x1.shape = (n_features,)
@@ -92,16 +90,15 @@ class SumKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
-        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
-    def eval_func(self, x1, x2, params):
+    def eval(self, x1, x2, params):
         '''
             returns Kernel1(x1, x2) + Kernel2(x1, x2)
             x1.shape = (n_features,)
             x2.shape = (n_features,)
             params (tuple) 
         '''
-        return self.kernel_1.eval_func(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval_func(x1, x2, params[self.kernel_1.num_params:])
+        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
     
 class ProductKernel(BaseKernel):
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
@@ -110,13 +107,12 @@ class ProductKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
-        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
-    def eval_func(self, x1, x2, params):
+    def eval(self, x1, x2, params):
         '''
             returns Kernel1(x1, x2) + Kernel2(x1, x2)
             x1.shape = (n_features,)
             x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
         '''
-        return self.kernel_1.eval_func(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval_func(x1, x2, params[self.kernel_1.num_params:])
+        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
