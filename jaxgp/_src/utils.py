@@ -2,7 +2,8 @@ import jax.numpy as jnp
 from jax import vmap, jit, Array
 from jax.scipy.linalg import solve
 from functools import partial
-from ..kernels import BaseKernel
+
+from .kernels import BaseKernel
 
 from typing import Tuple, Union
 

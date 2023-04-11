@@ -1,2 +1,2 @@
-from .._src.utils.predict import full_meanstd
-from .._src.utils.predict import sparse_meanstd
+from .._src.predict import full_predict
+from .._src.predict import sparse_predict

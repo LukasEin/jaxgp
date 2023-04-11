@@ -52,13 +52,11 @@ class BaseKernel:
         '''
         return self._ddf(x1, x2, params)[index_1, index_2]
 
-    @staticmethod
-    def __add__(first, second):
-        return SumKernel(first, second)
+    def __add__(self, other):
+        return SumKernel(self, other)
     
-    @staticmethod
-    def __mul__(first, second):
-        return ProductKernel(first, second)
+    def __mul__(self, other):
+        return ProductKernel(self, other)
     
     def tree_flatten(self):
         return ((self.num_params, ), None)
