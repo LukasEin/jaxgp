@@ -8,6 +8,7 @@ from jax import Array
 from typing import Union, Tuple
 
 from .kernels import RBF
+from .utils import covar
 
 class BaseGPR:
     def __init__(self, kernel=RBF(), data_split=(0, 0), init_kernel_params=(1.0, 1.0), noise=1e-4, *, optimize_noise=False, noise_prior=None, kernel_prior=None) -> None:
@@ -114,7 +115,7 @@ class BaseGPR:
 
             Builds a vector of the covariance of all X[:,i] with them selves.
         '''
-        func = lambda A: self.kernel.eval_func(A, A, params)
+        func = lambda A: self.kernel.eval(A, A, params)
         func = vmap(func, in_axes=(0))
         return func(X)
 
@@ -128,7 +129,7 @@ class BaseGPR:
             Builds the covariance matrix between the elements of X1 and X2
             based on inputs representing values of the target function.
         '''
-        func = lambda A, B: self.kernel.eval_func(A, B, params)
+        func = lambda A, B: self.kernel.eval(A, B, params)
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
         return func(X1, X2)
     
@@ -146,7 +147,7 @@ class BaseGPR:
             based on X1 representing values of the target function and X2
             representing derivative values of the target function.
         '''
-        func = lambda A, B: self.kernel.eval_dx2(A,B, index, params) 
+        func = lambda A, B: self.kernel.grad2(A,B, index, params) 
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
         return func(X1, X2)
     
@@ -164,7 +165,7 @@ class BaseGPR:
             based on X1 and X2 representing derivative values of the target 
             function.
         '''
-        func = lambda A, B: self.kernel.eval_ddx1x2(A, B, index_1, index_2, params) 
+        func = lambda A, B: self.kernel.jac(A, B, index_1, index_2, params) 
         func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
         return func(X1, X2)
 
@@ -176,6 +177,9 @@ class ExactGPR(BaseGPR):
 
     @partial(jit, static_argnums=(0))
     def forward(self, params: Array, Y_data: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+        fitmatrix = covar.full_covariance_matrix(X_split, params[0], self.kernel, params[1:])
+        return fitmatrix, Y_data
+
         # Build the full covariance Matrix between all datapoints in X_data depending on if they   
         # represent function evaluations or derivative evaluations
         K_NN = self._CovMatrix_Kernel(X_split[0], X_split[0], params=params[1:])
@@ -303,6 +307,8 @@ class SparseGPR(BaseGPR):
 
     @partial(jit, static_argnums=(0,))
     def forward(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+        return covar.sparse_covariance_matrix(X_split, Y_data, X_ref, params[0], self.kernel, params[1:])
+
         # calculates the covariance between the training points and the reference points
         K_MN = self._CovMatrix_Kernel(X_ref, X_split[0], params[1:])
         for i,elem in enumerate(X_split[1:]):

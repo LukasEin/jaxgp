@@ -84,7 +84,7 @@ class RBF(BaseKernel):
                 the second the length_scale
                 if lenghtscale should be (n_features,) must create new kernel
         '''
-        diff = (x1 - x2) / ls
+        diff = (x1 - x2) / ls[0]
         return jnp.exp(-0.5 * jnp.dot(diff, diff))
 
 @register_pytree_node_class    
