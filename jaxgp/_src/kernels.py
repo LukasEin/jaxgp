@@ -1,13 +1,16 @@
 from jax import jacrev, jacfwd
 import jax.numpy as jnp
 
+from jax import Array
+
 class BaseKernel:
+    '''A base class for all kernels that defines the derivatives of the eval method. The eval method must be overwritten in any derived classes.
+    '''
     def __init__(self) -> None:
         self._df = jacrev(self.eval, argnums=1)
         self._ddf = jacfwd(self._df, argnums=0)
 
         self.num_params = 0
-        self.param_bounds = None
 
     def __add__(self, other):
         return SumKernel(self, other)
@@ -15,37 +18,68 @@ class BaseKernel:
     def __mul__(self, other):
         return ProductKernel(self, other)
 
-    def eval(self, x1, x2, params):
-        raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval_func!")
-    
-    def grad2(self, x1, x2, index, params):
-        '''
-            returns the derivative of the Kernel w.r.t x2[index]
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            length_scale.shape = (n_features,) or scalar
+    def eval(self, x1: Array, x2: Array, params: Array):
+        '''Kernel evaluation
 
-            0 >= index (int) < n_features
-                error if not given
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first function evaluation
+        x2 : Array
+            (n_features, ), point of second function evaluation
+        params : Array
+            kernel parameters
+
+        Raises
+        ------
+        NotImplementedError
+            Any Kernel must override this method
         '''
-        # if index is None:
-        #     raise ValueError("Index missing!")
+        raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
+    
+    def grad2(self, x1: Array, x2: Array, index: int, params: Array) -> float:
+        '''derivative of the Kernel w.r.t x2[index]
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of function evaluation
+        x2 : Array
+            (n_features, ), point of derivative evaluation
+        index : int
+            index of x2 w.r.t. which the derivative is calculated
+        params : Array
+            kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between a function evaluation and a derivative evaluation
+        '''
         return self._df(x1, x2, params)[index]
     
-    def jac(self, x1, x2, index_1, index_2, params):
+    def jac(self, x1: Array, x2: Array, index1: int, index2: int, params: Array) -> float:
+        '''derivative of the Kernel w.r.t x1 [index1] and x2[index2]
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first derivative evaluation
+        x2 : Array
+            (n_features, ), point of second derivative evaluation
+        index1 : int
+            index of x1 w.r.t. which the derivative is calculated
+        index2 : int
+            index of x2 w.r.t. which the derivative is calculated
+        params : Array
+            kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between two derivative evaluations
         '''
-            returns the double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            length_scale.shape = (n_features,) or scalar
-            
-            0 >= index_i (int) < n_features if given
-                if both are None the full Jacobian is returned 
-                if only one is None the corresponding row/colums is returned
-        '''
-        # if index_1 is None or index_2 is None:
-        #     raise ValueError("Indices missing!")
-        return self._ddf(x1, x2, params)[index_1, index_2]
+        return self._ddf(x1, x2, params)[index1, index2]
 
 class RBF(BaseKernel):
     def __init__(self, num_params=1):
@@ -53,17 +87,24 @@ class RBF(BaseKernel):
 
         self.num_params = num_params
     
-    def eval(self, x1, x2, ls=(1.0,)):
+    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+        '''RBF Kernel
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first function evaluation
+        x2 : Array
+            (n_features, ), point of second function evaluation
+        params : Array
+            scalar or (n_features, ), kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between two function evaluations
         '''
-            returns RBF(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params.shape = (1 + 1,)
-                the first value describes the size coefficient in front,
-                the second the length_scale
-                if lenghtscale should be (n_features,) must create new kernel
-        '''
-        diff = (x1 - x2) / ls
+        diff = (x1 - x2) / params
         return jnp.exp(-0.5 * jnp.dot(diff, diff))
     
 class Linear(BaseKernel):
@@ -72,16 +113,24 @@ class Linear(BaseKernel):
 
         self.num_params = num_params
 
-    def eval(self, x1, x2, params=(1.0, 0.0)):
+    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+        '''Linear Kernel
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first function evaluation
+        x2 : Array
+            (n_features, ), point of second function evaluation
+        params : Array
+            (1 + 1, ) or (1 + n_features, ), kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between two function evaluations
         '''
-            returns Linear(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params.shape = (1 + 1,)
-                the first value describes the additive offset,
-                the second the length_scale
-        '''
-        return jnp.inner(x1, x2) * params[1] + params[0]
+        return jnp.inner(x1, x2) * params[1:] + params[0]
 
 class SumKernel(BaseKernel):
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
@@ -91,12 +140,22 @@ class SumKernel(BaseKernel):
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
 
-    def eval(self, x1, x2, params):
-        '''
-            returns Kernel1(x1, x2) + Kernel2(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params (tuple) 
+    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+        '''Sum of two Kernels
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first function evaluation
+        x2 : Array
+            (n_features, ), point of second function evaluation
+        params : Array
+            (n_params1, n_params2), kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between two function evaluations
         '''
         return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
     
@@ -108,11 +167,21 @@ class ProductKernel(BaseKernel):
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
 
-    def eval(self, x1, x2, params):
-        '''
-            returns Kernel1(x1, x2) + Kernel2(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            length_scale.shape = (n_features,) or scalar
+    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+        '''Product of two Kernels
+
+        Parameters
+        ----------
+        x1 : Array
+            (n_features, ), point of first function evaluation
+        x2 : Array
+            (n_features, ), point of second function evaluation
+        params : Array
+            (n_params1, n_params2), kernel parameters
+
+        Returns
+        -------
+        float
+            covariance between two function evaluations
         '''
         return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
