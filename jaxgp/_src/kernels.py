@@ -1,24 +1,33 @@
 from jax import jacrev, jacfwd
 import jax.numpy as jnp
+from jax import Array
+from jax.tree_util import register_pytree_node_class
 
+@register_pytree_node_class
 class BaseKernel:
     def __init__(self) -> None:
-        self._df = jacrev(self.eval_func, argnums=1)
+        self._df = jacrev(self.eval, argnums=1)
         self._ddf = jacfwd(self._df, argnums=0)
 
-        self.num_params = 0
-        self.param_bounds = None
-
-    def __add__(self, other):
-        return SumKernel(self, other)
+        self.num_params = None
     
-    def __mul__(self, other):
-        return ProductKernel(self, other)
+    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+        '''eval: covariance between two function evaluations at x1 and x2.
 
-    def eval_func(self, x1, x2, params):
-        raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval_func!")
+        Args:
+            x1 (Array): first point of shape (n_features, )
+            x2 (Array): second point of shape (n_features, )
+            params (Array): array of parameters of the given kernel
+
+        Raises:
+            NotImplementedError: This method must be overwritten in all derived classes
+
+        Returns:
+            float: scalar value that describes the covariance between the points
+        '''
+        raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
     
-    def eval_dx2(self, x1, x2, index, params):
+    def grad2(self, x1, x2, index, params):
         '''
             returns the derivative of the Kernel w.r.t x2[index]
             x1.shape = (n_features,)
@@ -28,11 +37,9 @@ class BaseKernel:
             0 >= index (int) < n_features
                 error if not given
         '''
-        # if index is None:
-        #     raise ValueError("Index missing!")
         return self._df(x1, x2, params)[index]
     
-    def eval_ddx1x2(self, x1, x2, index_1, index_2, params):
+    def jac(self, x1, x2, index_1, index_2, params):
         '''
             returns the double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
             x1.shape = (n_features,)
@@ -43,18 +50,31 @@ class BaseKernel:
                 if both are None the full Jacobian is returned 
                 if only one is None the corresponding row/colums is returned
         '''
-        # if index_1 is None or index_2 is None:
-        #     raise ValueError("Indices missing!")
         return self._ddf(x1, x2, params)[index_1, index_2]
 
+    @staticmethod
+    def __add__(first, second):
+        return SumKernel(first, second)
+    
+    @staticmethod
+    def __mul__(first, second):
+        return ProductKernel(first, second)
+    
+    def tree_flatten(self):
+        return ((self.num_params, ), None)
+    
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls(*children)
+
+@register_pytree_node_class
 class RBF(BaseKernel):
-    def __init__(self, param_bounds=((1e-5, 1e5),)):
+    def __init__(self, num_params = 1):
         super().__init__()
 
-        self.num_params = 1
-        self.param_bounds = param_bounds
+        self.num_params = num_params
     
-    def eval_func(self, x1, x2, ls=(1.0,)):
+    def eval(self, x1, x2, ls):
         '''
             returns RBF(x1, x2)
             x1.shape = (n_features,)
@@ -64,17 +84,17 @@ class RBF(BaseKernel):
                 the second the length_scale
                 if lenghtscale should be (n_features,) must create new kernel
         '''
-        diff = (x1 - x2) / ls[0]
+        diff = (x1 - x2) / ls
         return jnp.exp(-0.5 * jnp.dot(diff, diff))
-    
+
+@register_pytree_node_class    
 class Linear(BaseKernel):
-    def __init__(self, param_bounds=((1e-5, 1e5),(1e-5, 1e5))):
+    def __init__(self, num_params=2):
         super().__init__()
 
-        self.num_params = 2
-        self.param_bounds = param_bounds
+        self.num_params = num_params
 
-    def eval_func(self, x1, x2, params=(1.0, 0.0)):
+    def eval_func(self, x1, x2, params=(0.0, 1.0)):
         '''
             returns Linear(x1, x2)
             x1.shape = (n_features,)
@@ -83,8 +103,9 @@ class Linear(BaseKernel):
                 the first value describes the additive offset,
                 the second the length_scale
         '''
-        return jnp.inner(x1, x2) * params[1] + params[0]
+        return jnp.inner(x1, x2) * params[1:] + params[0]
 
+@register_pytree_node_class
 class SumKernel(BaseKernel):
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
         super().__init__()
@@ -92,7 +113,6 @@ class SumKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
-        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
     def eval_func(self, x1, x2, params):
         '''
@@ -101,8 +121,9 @@ class SumKernel(BaseKernel):
             x2.shape = (n_features,)
             params (tuple) 
         '''
-        return self.kernel_1.eval_func(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval_func(x1, x2, params[self.kernel_1.num_params:])
-    
+        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
+
+@register_pytree_node_class
 class ProductKernel(BaseKernel):
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
         super().__init__()
@@ -110,7 +131,6 @@ class ProductKernel(BaseKernel):
         self.kernel_2 = kernel_2
 
         self.num_params = kernel_1.num_params + kernel_2.num_params
-        self.param_bounds = kernel_1.param_bounds + kernel_2.param_bounds
 
     def eval_func(self, x1, x2, params):
         '''
@@ -119,4 +139,4 @@ class ProductKernel(BaseKernel):
             x2.shape = (n_features,)
             length_scale.shape = (n_features,) or scalar
         '''
-        return self.kernel_1.eval_func(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval_func(x1, x2, params[self.kernel_1.num_params:])
+        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
