@@ -1,7 +1,7 @@
-from jax import jacrev, jacfwd
 import jax.numpy as jnp
-from jax import Array
+from jax import Array, jacfwd, jacrev
 from jax.tree_util import register_pytree_node_class
+
 
 @register_pytree_node_class
 class BaseKernel:

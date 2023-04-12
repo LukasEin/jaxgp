@@ -1,16 +1,14 @@
+from typing import Union
+
 import jax.numpy as jnp
-from jax.scipy.linalg import solve
 from jax import Array, jit
+from jax.scipy.linalg import solve
 
-from typing import Tuple, Union
-from functools import partial
-
-from .kernels import BaseKernel
-
-from .utils import _CovMatrix_Kernel
-from .utils import _CovMatrix_Grad
 from .covar import full_covariance_matrix
-   
+from .kernels import BaseKernel
+from .utils import _CovMatrix_Grad, _CovMatrix_Kernel
+
+
 @jit   
 def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for full GPR. Y_data ~ N(0,[id*s**2 + K_NN]).

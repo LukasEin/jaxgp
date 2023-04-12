@@ -1,12 +1,12 @@
+from typing import Tuple, Union
+
 import jax.numpy as jnp
-from jax import jit
+from jax import Array
 from jaxopt import ScipyBoundedMinimize
 
-from jax import Array
-from typing import Union, Tuple
-
+from . import covar, likelyhood, predict
 from .kernels import BaseKernel
-from . import covar, predict, likelyhood
+
 
 class ExactGPR:
     def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], *, optimize_noise=False, logger=None) -> None:

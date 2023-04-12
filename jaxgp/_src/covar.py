@@ -1,13 +1,11 @@
+from typing import Tuple, Union
+
 import jax.numpy as jnp
 from jax import Array, jit
 
-from typing import Tuple, Union
-
-from .utils import _CovMatrix_Kernel
-from .utils import _CovMatrix_Grad
-from .utils import _CovMatrix_Hess
-
 from .kernels import BaseKernel
+from .utils import _CovMatrix_Grad, _CovMatrix_Hess, _CovMatrix_Kernel
+
 
 @jit
 def full_covariance_matrix(X_split: list[Array], noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Array:

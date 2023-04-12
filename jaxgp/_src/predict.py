@@ -1,13 +1,12 @@
-import jax.numpy as jnp
-from jax.scipy.linalg import solve
-from jax import Array, jit
-
 from typing import Tuple
 
-from .utils import _CovMatrix_Kernel
-from .utils import _CovMatrix_Grad
-from .utils import _CovVector_Id
-from .utils import _build_xT_Ainv_x
+import jax.numpy as jnp
+from jax import Array, jit
+from jax.scipy.linalg import solve
+
+from .utils import (_build_xT_Ainv_x, _CovMatrix_Grad, _CovMatrix_Kernel,
+                    _CovVector_Id)
+
 
 @jit
 def full_predict(X: Array, full_covmatrix: Array, Y_data: Array, X_split: Array, kernel, params: Array) -> Tuple[Array, Array]:

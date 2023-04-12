@@ -1,11 +1,10 @@
-import jax.numpy as jnp
-from jax import vmap, jit, Array
-from jax.scipy.linalg import solve
 from functools import partial
+
+from jax import Array, jit, vmap
+from jax.scipy.linalg import solve
 
 from .kernels import BaseKernel
 
-from typing import Tuple, Union
 
 @jit
 @partial(vmap, in_axes=(None, 0))
