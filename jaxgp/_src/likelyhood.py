@@ -10,8 +10,8 @@ from .kernels import BaseKernel
 from .utils import _CovMatrix_Kernel
 from .utils import _CovMatrix_Grad
 from .covar import full_covariance_matrix
-    
-@jit    
+   
+@jit   
 def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for full GPR. Y_data ~ N(0,[id*s**2 + K_NN]).
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
@@ -44,9 +44,9 @@ def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array],
     _, logdet = jnp.linalg.slogdet(fit_matrix)
 
     # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-    mle = 0.5(logdet + fit_vector@solve(fit_matrix, fit_vector, assume_a="pos"))
+    mle = 0.5*(logdet + fit_vector@solve(fit_matrix, fit_vector, assume_a="pos"))
     
-    return mle
+    return mle / 20000.0
 
 @jit
 def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel) -> float:
@@ -90,10 +90,10 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array
 
     # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
     invert_matrix = K_ref*noise**2 + K_MN@K_MN.T
-    mle = 0.5(logdet + (Y_data@Y_data -
+    mle = 0.5*(logdet + (Y_data@Y_data -
                     Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2)
     
-    return mle
+    return mle / 20000.0
 
 # def sparse_negativeLogLikelyhood(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> float:
 #     '''

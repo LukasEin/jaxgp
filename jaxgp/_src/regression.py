@@ -11,7 +11,7 @@ from . import covar, predict, likelyhood
 class ExactGPR:
     def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], *, optimize_noise=False, logger=None) -> None:
         self.kernel = kernel
-        self.kernel_params = init_kernel_params
+        self.kernel_params = jnp.array(init_kernel_params)
         self.noise = noise
 
         self.optimize_noise = optimize_noise
@@ -36,7 +36,7 @@ class ExactGPR:
 class SparseGPR:
     def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], X_ref: Array, *, optimize_noise=False, logger=None) -> None:
         self.kernel = kernel
-        self.kernel_params = init_kernel_params
+        self.kernel_params = jnp.array(init_kernel_params)
         self.noise = noise
 
         self.X_ref = X_ref
