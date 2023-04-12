@@ -105,64 +105,96 @@ class BaseGPR:
 
             self.params = jnp.array((self.noise, ) + result.params)
 
-# class ExactGPR:
-#     def __init__(self, kernel, init_kernel_params, noise, *, optimize_noise) -> None:
-#         self.kernel = kernel
-#         self.kernel_params = init_kernel_params
-#         self.noise = noise
+class ExactGPR:
+    def __init__(self, kernel, init_kernel_params, noise, *, optimize_noise=False, logger=None) -> None:
+        self.kernel = kernel
+        self.kernel_params = init_kernel_params
+        self.noise = noise
 
-#         self.optimize_noise = optimize_noise
+        self.optimize_noise = optimize_noise
+        self.logger = logger
 
-#     def logger(self, output):
-#         print(output)
+    def train(self, X_data, Y_data, *, data_split=None):
+        if data_split is None:
+            self.X_split = X_data
+        else:
+            sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
+            self.X_split = jnp.split(X_data, sum_splits)
 
-#     def train(self, X_data, Y_data, *, data_split=None):
-#         if data_split is None:
-#             X_split = X_data
-#         else:
-#             sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
-#             X_split = jnp.split(X_data, sum_splits)
+        min_obj = jit(likelyhood.full_kernelNegativeLogLikelyhood)
 
-#         solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood, method="l-bfgs-b")
-#         self.kernel_params = solver.run(self.kernel_params, (1e-3,jnp.inf), X_split, Y_data, self.noise, self.kernel).params
+        solver = ScipyBoundedMinimize(fun=min_obj, method="l-bfgs-b", callback=self.logger)
+        self.kernel_params = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.noise, self.kernel).params
 
-#         self.fit_matrix = covar.full_covariance_matrix(X_split, self.noise, self.kernel, self.kernel_params)
-#         self.fit_vector = Y_data
+        self.fit_matrix = jit(covar.full_covariance_matrix)(self.X_split, self.noise, self.kernel, self.kernel_params)
+        self.fit_vector = Y_data
 
-class ExactGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4, *, optimize_noise=False) -> None:
-        super().__init__(kernel, data_split, kernel_params, noise, optimize_noise=optimize_noise)
-
-        self.further_args = []
-
-    def forward(self, params: Array, Y_data: Array, X_split: list[Array]) -> Tuple[Array, Array]:
-        fitmatrix = jit(covar.full_covariance_matrix)(X_split, params[0], self.kernel, params[1:])
-        return fitmatrix, Y_data
+    def eval(self, X):
+        return jit(predict.full_predict)(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
     
-    def _meanstd(self, params: Array, X: Array, fitmatrix: Array, fitvector: Array, X_split: Array) -> Tuple[Array, Array]:
-        return jit(predict.full_predict)(X, fitmatrix, fitvector, X_split, self.kernel, params[1:])
-    
-    def _kernelNegativeLogLikelyhood(self, kernel_params: Array, noise: Union[Array, float], Y_data: Array, X_split: list[Array]) -> float:
-        return jit(likelyhood.full_kernelNegativeLogLikelyhood)(kernel_params, X_split, Y_data, noise, self.kernel)
+class SparseGPR:
+    def __init__(self, kernel, init_kernel_params, noise, X_ref, *, optimize_noise=False, logger=None) -> None:
+        self.kernel = kernel
+        self.kernel_params = init_kernel_params
+        self.noise = noise
 
-class SparseGPR(BaseGPR):
-    def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, optimize_noise=False) -> None:
-        '''
-            Sparsifies the full GP regressor by the Projected Process Approximation.
-        '''
-        super().__init__(kernel, data_split, kernel_params, noise, optimize_noise=optimize_noise)
+        self.X_ref = X_ref
 
-        self.further_args = [X_ref, ]
+        self.optimize_noise = optimize_noise
+        self.logger = logger
 
-    def forward(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> Tuple[Array, Array]:
-        return jit(covar.sparse_covariance_matrix)(X_split, Y_data, X_ref, params[0], self.kernel, params[1:])
+    def train(self, X_data, Y_data, *, data_split=None):
+        if data_split is None:
+            self.X_split = X_data
+        else:
+            sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
+            self.X_split = jnp.split(X_data, sum_splits)
+
+        min_obj = jit(likelyhood.sparse_kernelNegativeLogLikelyhood)
+
+        solver = ScipyBoundedMinimize(fun=min_obj, method="l-bfgs-b", callback=self.logger)
+        self.kernel_params = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel).params
+
+        self.fit_matrix, self.fit_vector = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+
+    def eval(self, X):
+        return jit(predict.sparse_predict)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
+
+
+# class ExactGPR(BaseGPR):
+#     def __init__(self, kernel=RBF(), data_split=(0, 0), kernel_params=(1.0,), noise=1e-4, *, optimize_noise=False) -> None:
+#         super().__init__(kernel, data_split, kernel_params, noise, optimize_noise=optimize_noise)
+
+#         self.further_args = []
+
+#     def forward(self, params: Array, Y_data: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+#         fitmatrix = jit(covar.full_covariance_matrix)(X_split, params[0], self.kernel, params[1:])
+#         return fitmatrix, Y_data
     
-    # @partial(jit, static_argnums=(0,))
-    def _meanstd(self, params: Array, X: Array, fitmatrix: Array, fitvector: Array, X_ref: Array, X_split: list[Array]) -> Tuple[Array, Array]:
-        '''
-            calculates the posterior mean and std for all points in X
-        '''
-        return jit(predict.sparse_predict)(X, fitmatrix, fitvector, X_ref, params[0], self.kernel, params[1:])
+#     def _meanstd(self, params: Array, X: Array, fitmatrix: Array, fitvector: Array, X_split: Array) -> Tuple[Array, Array]:
+#         return jit(predict.full_predict)(X, fitmatrix, fitvector, X_split, self.kernel, params[1:])
     
-    def _kernelNegativeLogLikelyhood(self, kernel_params: Array, noise: Union[Array, float], Y_data: Array, X_ref: Array, X_split: list[Array]) -> float:
-        return jit(likelyhood.sparse_kernelNegativeLogLikelyhood)(kernel_params, X_split, Y_data, X_ref, noise, self.kernel)
+#     def _kernelNegativeLogLikelyhood(self, kernel_params: Array, noise: Union[Array, float], Y_data: Array, X_split: list[Array]) -> float:
+#         return jit(likelyhood.full_kernelNegativeLogLikelyhood)(kernel_params, X_split, Y_data, noise, self.kernel)
+
+# class SparseGPR(BaseGPR):
+#     def __init__(self, kernel=RBF(), data_split=(0,), X_ref=None, kernel_params=(1.0,), noise= 1e-4, *, optimize_noise=False) -> None:
+#         '''
+#             Sparsifies the full GP regressor by the Projected Process Approximation.
+#         '''
+#         super().__init__(kernel, data_split, kernel_params, noise, optimize_noise=optimize_noise)
+
+#         self.further_args = [X_ref, ]
+
+#     def forward(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+#         return jit(covar.sparse_covariance_matrix)(X_split, Y_data, X_ref, params[0], self.kernel, params[1:])
+    
+#     # @partial(jit, static_argnums=(0,))
+#     def _meanstd(self, params: Array, X: Array, fitmatrix: Array, fitvector: Array, X_ref: Array, X_split: list[Array]) -> Tuple[Array, Array]:
+#         '''
+#             calculates the posterior mean and std for all points in X
+#         '''
+#         return jit(predict.sparse_predict)(X, fitmatrix, fitvector, X_ref, params[0], self.kernel, params[1:])
+    
+#     def _kernelNegativeLogLikelyhood(self, kernel_params: Array, noise: Union[Array, float], Y_data: Array, X_ref: Array, X_split: list[Array]) -> float:
+#         return jit(likelyhood.sparse_kernelNegativeLogLikelyhood)(kernel_params, X_split, Y_data, X_ref, noise, self.kernel)

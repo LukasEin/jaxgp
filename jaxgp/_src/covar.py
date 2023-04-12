@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from jax import Array
+from jax import Array, jit
 
 from typing import Tuple, Union
 
@@ -9,6 +9,7 @@ from .utils import _CovMatrix_Hess
 
 from .kernels import BaseKernel
 
+@jit
 def full_covariance_matrix(X_split: list[Array], noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Array:
     '''Calculates the full covariance matrix over the input samples in X_split.
 
@@ -49,6 +50,7 @@ def full_covariance_matrix(X_split: list[Array], noise: Union[float, Array], ker
     # numerical stability of the inversion and determinant
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
+@jit
 def sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, params) -> Tuple[Array, Array]:
     '''Calculates the sparse covariance matrix over the input samples in X_split and the projected input labels in Y_data according to the Projected Process Approximation.
 

@@ -7,6 +7,7 @@ from .kernels import BaseKernel
 
 from typing import Tuple, Union
 
+@jit
 @partial(vmap, in_axes=(None, 0))
 def _build_xT_Ainv_x(A: Array, X: Array) -> Array:
     '''
@@ -19,6 +20,7 @@ def _build_xT_Ainv_x(A: Array, X: Array) -> Array:
     '''
     return X.T@solve(A,X,assume_a="pos")
 
+@jit
 def _CovVector_Id(X: Array, kernel: BaseKernel, params: Array) -> Array:
     '''
         X1.shape = (N, n_features)
@@ -31,6 +33,7 @@ def _CovVector_Id(X: Array, kernel: BaseKernel, params: Array) -> Array:
     func = vmap(func, in_axes=(0))
     return func(X)
 
+@jit
 def _CovMatrix_Kernel(X1: Array, X2: Array, kernel: BaseKernel, params: Array) -> Array:
     '''
         X1.shape = (N1, n_features)
@@ -45,6 +48,7 @@ def _CovMatrix_Kernel(X1: Array, X2: Array, kernel: BaseKernel, params: Array) -
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)
 
+@jit
 def _CovMatrix_Grad(X1: Array, X2: Array, kernel: BaseKernel, params: Array, index: int) -> Array:
     '''
         X1.shape = (N1, n_features)
@@ -63,6 +67,7 @@ def _CovMatrix_Grad(X1: Array, X2: Array, kernel: BaseKernel, params: Array, ind
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)
 
+@jit
 def _CovMatrix_Hess(X1: Array, X2: Array, kernel: BaseKernel, params: Array, index_1: int, index_2: int) -> Array:
     '''
         X1.shape = (N1, n_features)

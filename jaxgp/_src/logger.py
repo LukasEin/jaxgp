@@ -11,8 +11,7 @@ class Logger:
         self.buffer = []
 
     def __call__(self, output):
-        with open(self.name, mode="a") as f:
-            self.buffer.append(output)
+        self.buffer.append(output)
 
     def write(self, loss):
         with open(self.name, mode="a") as f:

@@ -9,6 +9,7 @@ from .utils import _CovMatrix_Grad
 from .utils import _CovVector_Id
 from .utils import _build_xT_Ainv_x
 
+@jit
 def full_predict(X: Array, fitmatrix: Array, fitvector: Array, X_split: Array, kernel, params: Array) -> Tuple[Array, Array]:
     '''
         calculates the posterior mean and std for all points in X
@@ -26,6 +27,7 @@ def full_predict(X: Array, fitmatrix: Array, fitvector: Array, X_split: Array, k
     
     return means, stds
 
+@jit
 def sparse_predict(X: Array, fitmatrix: Array, fitvector: Array, X_ref: Array, noise, kernel, params: Array) -> Tuple[Array, Array]:
     '''
         calculates the posterior mean and std for all points in X

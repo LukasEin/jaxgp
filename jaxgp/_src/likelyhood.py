@@ -11,6 +11,7 @@ from .utils import _CovMatrix_Kernel
 from .utils import _CovMatrix_Grad
 from .covar import full_covariance_matrix
     
+@jit    
 def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
     '''
         for PPA the Y_data ~ N(0,[id*s**2 + K_NN])
@@ -39,6 +40,7 @@ def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array],
     
     return mle / 20000.0
 
+@jit
 def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel) -> float:
     '''
         for PPA the Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN])
