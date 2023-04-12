@@ -18,7 +18,8 @@ def full_covariance_matrix(X_split: list[Array], noise: Union[float, Array], ker
     X_split : list[Array]
         List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
     noise : Union[float, Array]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. Else each value is added to the corresponding diagonal block coming from X_split
+        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+        Else each value is added to the corresponding diagonal block coming from X_split.
         Array is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
@@ -51,8 +52,9 @@ def full_covariance_matrix(X_split: list[Array], noise: Union[float, Array], ker
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
 @jit
-def sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, params) -> Tuple[Array, Array]:
-    '''Calculates the sparse covariance matrix over the input samples in X_split and the projected input labels in Y_data according to the Projected Process Approximation.
+def sparse_covariance_matrix(X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Tuple[Array, Array]:
+    '''Calculates the sparse covariance matrix over the input samples in X_split 
+    and the projected input labels in Y_data according to the Projected Process Approximation.
 
     Parameters
     ----------
@@ -63,7 +65,8 @@ def sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, params) -> T
     X_ref : Array
         Array of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
     noise : Union[float, Array]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. Else each value is added to the corresponding diagonal block coming from X_split
+        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+        Else each value is added to the corresponding diagonal block coming from X_split
         Array is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
