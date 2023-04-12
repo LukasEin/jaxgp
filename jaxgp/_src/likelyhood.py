@@ -1,4 +1,5 @@
 from typing import Union
+from functools import partial
 
 import jax.numpy as jnp
 from jax import Array, jit
@@ -9,7 +10,7 @@ from .kernels import BaseKernel
 from .utils import _CovMatrix_Grad, _CovMatrix_Kernel
 
 
-@jit   
+@jit 
 def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for full GPR. Y_data ~ N(0,[id*s**2 + K_NN]).
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
@@ -47,7 +48,7 @@ def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array],
     return mle / 20000.0
 
 @jit
-def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel) -> float:
+def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for sparse GPR (PPA). Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN]) which is the same as for Nystrom approximation.
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
 

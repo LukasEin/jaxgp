@@ -1,4 +1,5 @@
 from typing import Tuple, Union
+from functools import partial
 
 import jax.numpy as jnp
 from jax import Array, jit
