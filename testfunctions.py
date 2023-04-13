@@ -5,15 +5,15 @@ from jax import random
 from typing import Tuple, Union, Callable
 from jax import Array
 
-def create_training_data_2D(seed: int, num_datapoints: int, ranges: Tuple, noise: Union[float, Array], test_function: Callable) -> Tuple[Array, Array]:
+def create_training_data_2D(seed: int, num_gridpoints: int, ranges: Tuple, noise: Union[float, Array], test_function: Callable) -> Tuple[Array, Array]:
     '''creates training data for 2D functions
 
     Parameters
     ----------
     seed : int
-        seed for random key
-    num_datapoints : int
-        number of datapoints to return
+        seed for RNG noise creation
+    num_gridpoints : int
+        number of gridpoints in both dimensions, total returned datapoints are of size num_gridpoints**2
     ranges : Tuple
         ranges for the input space
     noise : Union[float, Array]
@@ -31,17 +31,15 @@ def create_training_data_2D(seed: int, num_datapoints: int, ranges: Tuple, noise
     f = jit(vmap(test_function, in_axes=(0,)))
     df = jit(vmap(grad(test_function, argnums=0), in_axes=(0,)))
 
+    X1 = jnp.linspace(*ranges[0],num_gridpoints[0])
+    X2 = jnp.linspace(*ranges[1],num_gridpoints[1])
+    X = jnp.array(jnp.meshgrid(X1, X2)).reshape(2,-1).T
+
     key = random.PRNGKey(seed)
     key, subkey = random.split(key)
-    X1 = random.uniform(subkey, (num_datapoints,), minval=ranges[0], maxval=ranges[1])
+    Y = f(X) + noise*random.normal(subkey, (jnp.prod(num_gridpoints),))
     key, subkey = random.split(key)
-    X2 = random.uniform(subkey, (num_datapoints,), minval=ranges[2], maxval=ranges[3])
-    X = jnp.vstack((X1, X2)).T
-
-    key, subkey = random.split(key)
-    Y = f(X) + noise*random.normal(subkey, (num_datapoints,))
-    key, subkey = random.split(key)
-    dY = df(X) + noise*random.normal(subkey, (num_datapoints,2))
+    dY = df(X) + noise*random.normal(subkey, (jnp.prod(num_gridpoints),2))
 
     Y = jnp.hstack((Y.reshape(-1,1), dY))
 
