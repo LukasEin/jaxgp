@@ -89,51 +89,93 @@ class BaseKernel:
         return ProductKernel(self, other)
     
     def tree_flatten(self):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
         return ((self.num_params, ), None)
     
     @classmethod
     def tree_unflatten(cls, aux_data, children):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
         return cls(*children)
 
 @register_pytree_node_class
 class RBF(BaseKernel):
+    '''Kernel based on radial basis function / gaussian
+    '''
     def __init__(self, num_params = 2):
+        '''
+        Parameters
+        ----------
+        num_params : int, optional
+            by default 2, if changed must be set to n_features + 1, according to the input data.
+        '''
         super().__init__()
 
         self.num_params = num_params
     
-    def eval(self, x1, x2, ls):
+    def eval(self, x1, x2, params):
+        '''covariance between two function evaluations at x1 and x2 
+        according to the RBF kernel.
+
+        Parameters
+        ----------
+        x1 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        x2 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        params : Array
+            shape (num_params, ). kernel parameters, the first is a multiplicative constant, 
+                                the rest a scale parameter of the inputs
+
+        Returns
+        -------
+        float
+            Scalar value that describes the covariance between the points.
         '''
-            returns RBF(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params.shape = (1 + 1,)
-                the first value describes the size coefficient in front,
-                the second the length_scale
-        '''
-        diff = (x1 - x2) / ls[1:]
-        return ls[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
+        diff = (x1 - x2) / params[1:]
+        return params[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
 
 @register_pytree_node_class    
 class Linear(BaseKernel):
+    '''kernel based on the dot-product of the two input vectors
+    '''
     def __init__(self, num_params=2):
+        '''
+        Parameters
+        ----------
+        num_params : int, optional
+            by default 2, if changed must be set to n_features + 1, according to the input data.
+        '''
         super().__init__()
 
         self.num_params = num_params
 
     def eval_func(self, x1, x2, params=(0.0, 1.0)):
+        '''covariance between two function evaluations at x1 and x2 
+        according to the Linear (dot-product) kernel.
+
+        Parameters
+        ----------
+        x1 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        x2 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        params : Array
+            shape (num_params, ). kernel parameters, the first is an additive constant, 
+                                the rest a scale parameter of the inputs
+
+        Returns
+        -------
+        float
+            Scalar value that describes the covariance between the points.
         '''
-            returns Linear(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params.shape = (1 + 1,)
-                the first value describes the additive offset,
-                the second the length_scale
-        '''
-        return jnp.inner(x1, x2) * params[1:] + params[0]
+        return jnp.inner(x1 * params[1:], x2) + params[0]
 
 @register_pytree_node_class
 class SumKernel(BaseKernel):
+    '''A wrapper that supplies the summing of two kernels
+    '''
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
         super().__init__()
         self.kernel_1 = kernel_1
@@ -142,16 +184,41 @@ class SumKernel(BaseKernel):
         self.num_params = kernel_1.num_params + kernel_2.num_params
 
     def eval_func(self, x1, x2, params):
-        '''
-            returns Kernel1(x1, x2) + Kernel2(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            params (tuple) 
+        '''covariance between two function evaluations at x1 and x2 
+        according to the sum of two kernels.
+
+        Parameters
+        ----------
+        x1 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        x2 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        params : Array
+            shape (num_params, ). kernel parameters, parameters are split 
+            according to the nmber of parameters each of the summed kernels has.
+
+        Returns
+        -------
+        float
+            Scalar value that describes the covariance between the points.
         '''
         return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
+    
+    def tree_flatten(self):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
+        return ((self.kernel_1, self.kernel_2), None)
+    
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
+        return cls(*children)
 
 @register_pytree_node_class
 class ProductKernel(BaseKernel):
+    '''a wrapper that supplies multiplying two kernels
+    '''
     def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
         super().__init__()
         self.kernel_1 = kernel_1
@@ -160,10 +227,33 @@ class ProductKernel(BaseKernel):
         self.num_params = kernel_1.num_params + kernel_2.num_params
 
     def eval_func(self, x1, x2, params):
-        '''
-            returns Kernel1(x1, x2) + Kernel2(x1, x2)
-            x1.shape = (n_features,)
-            x2.shape = (n_features,)
-            length_scale.shape = (n_features,) or scalar
+        '''covariance between two function evaluations at x1 and x2 
+        according to the product of two kernels.
+
+        Parameters
+        ----------
+        x1 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        x2 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        params : Array
+            shape (num_params, ). kernel parameters, parameters are split 
+            according to the nmber of parameters each of the summed kernels has.
+
+        Returns
+        -------
+        float
+            Scalar value that describes the covariance between the points.
         '''
         return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
+    
+    def tree_flatten(self):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
+        return ((self.kernel_1, self.kernel_2), None)
+    
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        '''necessary for this class to be an argument in a jitted function (jax)
+        '''
+        return cls(*children)
