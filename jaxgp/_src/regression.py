@@ -12,7 +12,7 @@ from .logger import Logger
 class ExactGPR:
     '''A full Gaussian Process regressor model
     '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], *, optimize_noise=False, logger: Logger = None) -> None:
+    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], *, optimize_method="l-bfgs-b", logger: Logger = None) -> None:
         '''
         Parameters
         ----------
@@ -24,10 +24,8 @@ class ExactGPR:
             noise present in the input labels
             either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
             Else each value is added to the corresponding diagonal block coming from X_split
-        optimize_noise : bool, optional
-            Flag if the noise should be optimized together with the kernel parameters, 
-            by default False
-            True not yet implemented!
+        optimize_method : str, optional
+            method to use in the optimizing process of the model parameters
         logger : Logger, optional
             If given must be a class with a __call__ method and a write method, by default None
             Logs the results of the optimization procedure.
@@ -36,7 +34,7 @@ class ExactGPR:
         self.kernel_params = jnp.array(init_kernel_params)
         self.noise = noise
 
-        self.optimize_noise = optimize_noise
+        self.optimize_method = optimize_method
         self.logger = logger
 
     def train(self, X_data: Union[Array, list[Array]], Y_data: Array, *, data_split: Tuple = None) -> None:
@@ -60,10 +58,13 @@ class ExactGPR:
             sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
             self.X_split = jnp.split(X_data, sum_splits)
 
-        solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood, method="l-bfgs-b", callback=self.logger)
+        solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood, method=self.optimize_method, callback=self.logger)
+        result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.noise, self.kernel)
+        print(result)
+        self.kernel_params = result.params
         if self.logger is not None:
-            self.logger.write(likelyhood.full_kernelNegativeLogLikelyhood)
-        self.kernel_params = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.noise, self.kernel).params
+            loss = lambda x: likelyhood.full_kernelNegativeLogLikelyhood(x, self.X_split, Y_data, self.noise, self.kernel)
+            self.logger.write(loss)
 
         self.fit_matrix = covar.full_covariance_matrix(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.fit_vector = Y_data
@@ -87,7 +88,7 @@ class SparseGPR:
     '''a sparse (PPA) Gaussian Process Regressor model.
     The full gaussian process is projected into a smaller subspace for computational efficiency
     '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], X_ref: Array, *, optimize_noise=False, logger=None) -> None:
+    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], X_ref: Array, *, optimize_method="l-bfgs-b", logger=None) -> None:
         '''
         Parameters
         ----------
@@ -101,10 +102,8 @@ class SparseGPR:
             Else each value is added to the corresponding diagonal block coming from X_split
         X_ref : Array
             shape (n_referencepoints, n_features). Reference points onto which the gaussian process is projected.
-        optimize_noise : bool, optional
-            Flag if the noise should be optimized together with the kernel parameters, 
-            by default False
-            True not yet implemented!
+        optimize_method : str, optional
+            method to use in the optimizing process of the model parameters
         logger : Logger, optional
             If given must be a class with a __call__ method and a write method, by default None
             Logs the results of the optimization procedure.
@@ -115,7 +114,7 @@ class SparseGPR:
 
         self.X_ref = X_ref
 
-        self.optimize_noise = optimize_noise
+        self.optimize_method = optimize_method
         self.logger = logger
 
     def train(self, X_data: Union[Array, list[Array]], Y_data: Array, *, data_split: Tuple = None) -> None:
@@ -139,9 +138,13 @@ class SparseGPR:
             sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
             self.X_split = jnp.split(X_data, sum_splits)
 
-        solver = ScipyBoundedMinimize(fun=likelyhood.sparse_kernelNegativeLogLikelyhood, method="l-bfgs-b", callback=self.logger)
-        self.kernel_params = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel).params
-
+        solver = ScipyBoundedMinimize(fun=likelyhood.sparse_kernelNegativeLogLikelyhood, method=self.optimize_method, callback=self.logger)
+        result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
+        print(result)
+        self.kernel_params = result.params
+        if self.logger is not None:
+            loss = lambda x: likelyhood.full_kernelNegativeLogLikelyhood(x, self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
+            self.logger.write(loss)
         self.fit_matrix, self.fit_vector = covar.sparse_covariance_matrix(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
     def eval(self, X: Array) -> Tuple[Array, Array]:

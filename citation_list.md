@@ -45,3 +45,8 @@
 
 - Link: https://docs.gpytorch.ai/en/v1.6.0/index.html
 - usefull code examples and such
+
+## 2d test functions:
+
+- Link: https://machinelearningmastery.com/2d-test-functions-for-function-optimization/
+- Additionally Franke function
