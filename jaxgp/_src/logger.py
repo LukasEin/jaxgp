@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import time
+from jax import vmap
 
 from typing import Tuple, Callable
 
@@ -13,6 +14,10 @@ class Logger:
             self.name = f"{name}.log"
 
         self.buffer = []
+        self.iters_list = []
+
+        with open(self.name, mode="w") as f:
+            pass
 
     def __call__(self, output: Tuple) -> None:
         '''Appends the current parameters in the iteration to the buffer
@@ -33,11 +38,34 @@ class Logger:
         loss : Callable
             loss function that takes the parameters in the buffer as input
         '''
-        with open(self.name, mode="a") as f:
-            f.write("# num_iter   params   loss\n")
-            for i,param in enumerate(self.buffer):
-                f.write(f"{i+1}   {param}   {loss(param)}\n")
+        if self.buffer:
+            params = jnp.array(self.buffer)
+            fun = vmap(loss, in_axes=0)
+            losses = fun(params)
 
-            f.write("-"*30 + "\n\n")
+            self.iters_list.append((params, losses))
+
+            with open(self.name, mode="a") as f:
+                f.write("# num_iter   params   loss\n")
+                for i,(param, loss) in enumerate(zip(params, losses)):
+                    f.write(f"{i+1}   {param}   {loss}\n")
+
+                f.write("-"*30 + "\n\n")
         
+        else:
+            with open(self.name, mode="a") as f:
+                f.write("# num_iter   params   loss\n")
+                f.write("-"*30 + "\n\n")
+
         self.buffer = []
+
+    def log(self, msg: str):
+        '''log sum message
+
+        Parameters
+        ----------
+        msg : str
+            message to append to logfile
+        '''
+        with open(self.name, mode="a") as f:
+            f.write(msg+"\n")

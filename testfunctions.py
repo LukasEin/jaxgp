@@ -4,6 +4,48 @@ from jax import random
 
 from typing import Tuple, Union, Callable
 from jax import Array
+from jaxgp.utils import Logger
+import jaxgp.regression as gpr
+from jaxgp.kernels import BaseKernel
+
+def test_optimizer(X_train: Array, Y_train: Array, num_f_vals: list[int], num_d_vals: list[int], logger: Logger, kernel: BaseKernel, 
+                   param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int):
+    key = random.PRNGKey(seed)
+    means = []
+    stds = []
+
+    num_datapoints = X_train.shape[0]
+
+    key, subkey = random.split(key)
+    fun_perm = random.permutation(subkey, num_datapoints)[:num_f_vals]
+    key, subkey = random.split(key)
+    d1_perm = random.permutation(subkey, num_datapoints)[:num_d_vals]
+    # key, subkey = random.split(key)
+    # d2_perm = random.permutation(subkey, num_datapoints)[:num_d_vals]
+
+    X_fun = X_train[fun_perm]
+    Y_fun = Y_train[fun_perm,0]
+    X_d1 = X_train[d1_perm]
+    Y_d1 = Y_train[d1_perm,1]
+    X_d2 = X_train[d1_perm]
+    Y_d2 = Y_train[d1_perm,2]
+
+    X = jnp.vstack((X_fun, X_d1, X_d2))
+    Y = jnp.hstack((Y_fun, Y_d1, Y_d2))
+    data_split = jnp.array([num_f_vals, num_d_vals, num_d_vals])
+
+    for i in range(iters):
+        key, subkey = random.split(key)
+        init_params = random.uniform(subkey, param_shape, minval=param_bounds[0], maxval=param_bounds[1])
+        logger.log(f"# iter {i+1}: init params {init_params}")
+
+        model = gpr.ExactGPR(kernel, init_params, noise, optimize_method=optimizer, logger=logger)
+        model.train(X, Y, data_split=data_split)
+        m, s = model.eval(evalgrid)
+        means.append(m)
+        stds.append(s)
+
+    return means, stds
 
 def create_training_data_2D(seed: int, num_gridpoints: int, ranges: Tuple, noise: Union[float, Array], test_function: Callable) -> Tuple[Array, Array]:
     '''creates training data for 2D functions
