@@ -8,8 +8,46 @@ from jaxgp.kernels import BaseKernel
 from jaxgp.utils import Logger
 
 
-def create_optimizer_data(functions: list, ranges: list, names: list, optimizers: str, num_gridpoints: int, noise: float, seed: int, num_f_vals: int, 
-                          num_d_vals: int, kernel: BaseKernel, param_bounds: Tuple, param_shape: Tuple , iters_per_optimizer: int, in_dir: str):
+def create_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: int, 
+                          noise: Union[float, Array], seed: int, num_f_vals: int,  num_d_vals: int, kernel: BaseKernel, param_bounds: Tuple, 
+                          param_shape: Tuple , iters_per_optimizer: int, in_dir: str) -> None:
+    '''Calculates and saves the posterior means and stds as well as the convergens behavior of the kernel_parameter
+    and stores everything in .npz files
+
+    Parameters
+    ----------
+    functions : list[Callable]
+        list of functions for which the optimizers should be compared
+    ranges : list[Tuple[float, float]]
+        list of ranges over which the functions were evaluated
+    names : list[str]
+        names of the functions
+    optimizers : str
+        different optimizers that are to be compared
+    num_gridpoints : Array
+        shape (num_x1, num_x2), number of grid points along each axis
+        Total number of gridpoints = Prod(num_gridpoints_i)
+    noise : Union[float, Array]
+        noise parameter that was added to Y_train
+        Array not yet implemented!
+    seed : int
+        seed for the random sampling
+    num_f_vals : int
+        number of function evaluations to put in random subset
+    num_d_vals : int
+        number of derivative evaluations to put in the random subset
+        Both derivatives are sampled at the same subset of features
+    kernel : BaseKernel
+        kernel that describes the covariance between features
+    param_bounds : Tuple
+        tuple (min, max), range from which to randomly choose the initial kernel parameters
+    param_shape : Tuple
+        Tuple (n_params, ), shape of the initial kernel parameters
+    iters_per_optimizer : int
+        _description_
+    in_dir : str
+        directory in which the files to be compared are stored
+    '''
     for fun, ran, name in zip(functions, ranges, names):
         X_train, Y_train = create_training_data_2D(seed, num_gridpoints, ran, noise, fun)
 
@@ -34,9 +72,33 @@ def create_optimizer_data(functions: list, ranges: list, names: list, optimizers
             jnp.savez(f"{in_dir}/{name}params{optimizer}", *params)
             jnp.savez(f"{in_dir}/{name}losses{optimizer}", *losses)   
 
-def compare_optimizer_data(functions: list, ranges: list, names: list, optimizers: str, num_gridpoints: int, in_dir: str, write: Callable):
+def compare_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: Array, in_dir: str, write: Callable):
+    '''Compares optimizers over different functions in multiple ways:
+    - how many true function values lie in the 68% and 95% confidence intervals
+    - the maximum difference between the mean and the true function values
+    - mean squared error over the whole grid
+    - maximum value of the standard deviation
+
+    Parameters
+    ----------
+    functions : list[Callable]
+        list of functions for which the optimizers should be compared
+    ranges : list[Tuple[float, float]]
+        list of ranges over which the functions were evaluated
+    names : list[str]
+        names of the functions
+    optimizers : str
+        different optimizers that are to be compared
+    num_gridpoints : Array
+        shape (num_x1, num_x2), number of grid points along each axis
+        Total number of gridpoints = Prod(num_gridpoints_i)
+    in_dir : str
+        directory in which the files to be compared are stored
+    write : Callable
+        function (str) -> Any, that somehow processes the information given in form of strings
+    '''
     for fun, ran, name in zip(functions, ranges, names,):
-        X, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)
+        _, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)
         Y = Y[:,0]
         
         write("-"*70 + "\n")
@@ -44,7 +106,7 @@ def compare_optimizer_data(functions: list, ranges: list, names: list, optimizer
         
         for optimizer in optimizers:
             means = jnp.load(f"{in_dir}/{name}means{optimizer}.npz")
-            stds = jnp.load(f"{in_dir}/{name}std{optimizer}.npz")
+            stds = jnp.load(f"{in_dir}/{name}stds{optimizer}.npz")
 
             write(f"optimizer: {optimizer}\n")
 
@@ -59,8 +121,46 @@ def compare_optimizer_data(functions: list, ranges: list, names: list, optimizer
 
                 write(f"iter {iter}: 68% = {jnp.mean(conf68):.5f}, 95% = {jnp.mean(conf95):.5f}, maxerr = {maxdiff:.5f}, mse = {mse:.5f}, maxstd = {maxstd:.5f}\n")
 
-def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: list[int], num_d_vals: list[int], logger: Logger, kernel: BaseKernel, 
-                   param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int):
+def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_vals: int, logger: Logger, kernel: BaseKernel, 
+                   param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int) -> Tuple[Array, Array]:
+    '''Takes the full training set and creates a random subset to fit an exact gpr to.
+
+    Parameters
+    ----------
+    X_train : Array
+        shape (n_samples, n_features), full training features
+    Y_train : Array
+        shape (n_samples, 3), full training labels (function eval, d1 eval , d2 eval) for each training feature
+    num_f_vals : int
+        number of function evaluations to put in random subset
+    num_d_vals : int
+        number of derivative evaluations to put in the random subset
+        Both derivatives are sampled at the same subset of features
+    logger : Logger
+        logs the optimization of the fitting parameters
+    kernel : BaseKernel
+        kernel that describes the covariance between features
+    param_bounds : Tuple
+        tuple (min, max), range from which to randomly choose the initial kernel parameters
+    param_shape : Tuple
+        Tuple (n_params, ), shape of the initial kernel parameters
+    noise : Union[float, Array]
+        noise parameter that was added to Y_train
+        Array not yet implemented!
+    optimizer : str
+        type of optimizer to use in finding optimal kernel parameters
+    iters : int
+        number of restarts with the same training data (chooses new inital kernel parameters)
+    evalgrid : Array
+        grid on which to evaluate the posterior mean and std
+    seed : int
+        seed for the random sampling
+
+    Returns
+    -------
+    Tuple[Array, Array]
+        posterior means and stds evaluated on evalgrid
+    '''
     key = random.PRNGKey(seed)
     means = []
     stds = []

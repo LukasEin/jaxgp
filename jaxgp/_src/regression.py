@@ -8,6 +8,9 @@ from . import covar, likelyhood, predict
 from .kernels import BaseKernel
 from .logger import Logger
 
+from scipy.optimize import minimize
+from jax import grad
+
 
 class ExactGPR:
     '''A full Gaussian Process regressor model
