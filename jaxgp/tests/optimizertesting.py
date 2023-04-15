@@ -1,14 +1,39 @@
-import jax.numpy as jnp
-from jax import grad, jit, vmap
-from jax import random
+from typing import Callable, Tuple, Union
 
-from typing import Tuple, Union, Callable
-from jax import Array
-from jaxgp.utils import Logger
+import jax.numpy as jnp
+from jax import Array, grad, jit, random, vmap
+
 import jaxgp.regression as gpr
 from jaxgp.kernels import BaseKernel
+from jaxgp.utils import Logger
 
-def test_optimizer(X_train: Array, Y_train: Array, num_f_vals: list[int], num_d_vals: list[int], logger: Logger, kernel: BaseKernel, 
+
+def compare_optimizer_data(functions: list, ranges: list, names: list, optimizers: str, num_gridpoints: int, in_dir: str, write: Callable):
+    for fun, ran, name in zip(functions, ranges, names,):
+        X, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)
+        Y = Y[:,0]
+        
+        write("-"*70 + "\n")
+        write(f"Current function: {name}\n")
+        
+        for optimizer in optimizers:
+            means = jnp.load(f"{in_dir}/{name}means{optimizer}.npz")
+            stds = jnp.load(f"{in_dir}/{name}std{optimizer}.npz")
+
+            write(f"optimizer: {optimizer}\n")
+
+            for iter, (mean, std) in enumerate(zip(means.values(), stds.values())):
+                conf68 = jnp.where(jnp.abs(Y-mean) <= std, 0, 1)
+                conf95 = jnp.where(jnp.abs(Y-mean) <= 2*std, 0, 1)
+
+                mse = jnp.mean((Y-mean)**2)
+
+                maxdiff = jnp.max(jnp.abs(Y-mean))
+                maxstd = jnp.max(std)
+
+                write(f"iter {iter}: 68% = {jnp.mean(conf68):.5f}, 95% = {jnp.mean(conf95):.5f}, maxerr = {maxdiff:.5f}, mse = {mse:.5f}, maxstd = {maxstd:.5f}\n")
+
+def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: list[int], num_d_vals: list[int], logger: Logger, kernel: BaseKernel, 
                    param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int):
     key = random.PRNGKey(seed)
     means = []
@@ -86,43 +111,3 @@ def create_training_data_2D(seed: int, num_gridpoints: int, ranges: Tuple, noise
     Y = jnp.hstack((Y.reshape(-1,1), dY))
 
     return X, Y
-
-def standard_parabola(x):
-    '''range = (-5,5)
-    '''
-    return x[0]**2 + x[1]**2
-
-def stretched_parabola(x):
-    '''range = (-10,10)
-    '''
-    return 0.26 * (x[0]**2 + x[1]**2) - 0.48 * x[0] * x[1]
-
-def easom(x):
-    '''range = (-10,10)
-    '''
-    return -jnp.cos(x[0]) * jnp.cos(x[1]) * jnp.exp(-((x[0] - jnp.pi)**2 + (x[1] - jnp.pi)**2))
-
-def ackley(x):
-    '''range = (-5,5)
-    '''
-    return -20.0*jnp.exp(-0.2*jnp.sqrt(0.5*(x[0]**2 + x[1]**2))) - jnp.exp(0.5*(jnp.cos(2*jnp.pi * x[0]) + jnp.cos(2*jnp.pi*x[1]))) + jnp.e + 20
-
-def himmelblau(x):
-    '''range = (-5,5)
-    '''
-    return (x[0]**2 + x[1] - 11)**2 + (x[0] + x[1]**2 -7)**2
-
-def holder(x):
-    '''range = (-10,10)
-    '''
-    return -jnp.abs(jnp.sin(x[0]) * jnp.cos(x[1]) * jnp.exp(jnp.abs(1 - (jnp.sqrt(x[0]**2 + x[1]**2)/jnp.pi))))
-
-def franke(x):
-    '''range = (0,1)
-    '''
-    term1 = 0.75 * jnp.exp(-(9*x[0]-2)**2/4 - (9*x[1]-2)**2/4)
-    term2 = 0.75 * jnp.exp(-(9*x[0]+1)**2/49 - (9*x[1]+1)/10)
-    term3 = 0.5 * jnp.exp(-(9*x[0]-7)**2/4 - (9*x[1]-3)**2/4)
-    term4 = -0.2 * jnp.exp(-(9*x[0]-4)**2 - (9*x[1]-7)**2)
-
-    return term1 + term2 + term3 + term4

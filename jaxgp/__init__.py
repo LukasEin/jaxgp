@@ -1,3 +1,7 @@
+__all__ = ["tests"]
+
+from . import tests
+
 from . import regression
 from . import kernels
 from . import covar
