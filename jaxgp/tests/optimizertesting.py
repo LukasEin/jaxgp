@@ -8,6 +8,32 @@ from jaxgp.kernels import BaseKernel
 from jaxgp.utils import Logger
 
 
+def create_optimizer_data(functions: list, ranges: list, names: list, optimizers: str, num_gridpoints: int, noise: float, seed: int, num_f_vals: int, 
+                          num_d_vals: int, kernel: BaseKernel, param_bounds: Tuple, param_shape: Tuple , iters_per_optimizer: int, in_dir: str):
+    for fun, ran, name in zip(functions, ranges, names):
+        X_train, Y_train = create_training_data_2D(seed, num_gridpoints, ran, noise, fun)
+
+        grid1 = jnp.linspace(*ran[0],100)
+        grid2 = jnp.linspace(*ran[1],100)
+        grid = jnp.array(jnp.meshgrid(grid1, grid2)).reshape(2,-1).T
+
+        for optimizer in optimizers:
+            print(f"Optimizer {optimizer}")
+            logger = Logger(optimizer)
+
+            means, stds = create_test_data_2D(X_train=X_train, Y_train=Y_train, num_f_vals=num_f_vals, num_d_vals=num_d_vals,
+                                              logger=logger, kernel=kernel, param_bounds=param_bounds, param_shape=param_shape, noise=noise, optimizer=optimizer,iters=iters_per_optimizer, evalgrid=grid, seed=seed)
+            
+            jnp.savez(f"{in_dir}/{name}means{optimizer}", *means)
+            jnp.savez(f"{in_dir}/{name}stds{optimizer}", *stds)
+            params = []
+            losses = []
+            for elem in logger.iters_list:
+                params.append(elem[0])
+                losses.append(elem[1])
+            jnp.savez(f"{in_dir}/{name}params{optimizer}", *params)
+            jnp.savez(f"{in_dir}/{name}losses{optimizer}", *losses)   
+
 def compare_optimizer_data(functions: list, ranges: list, names: list, optimizers: str, num_gridpoints: int, in_dir: str, write: Callable):
     for fun, ran, name in zip(functions, ranges, names,):
         X, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)

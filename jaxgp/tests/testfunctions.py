@@ -1,6 +1,9 @@
 import jax.numpy as jnp
 
 
+def sin2d(x):
+    return jnp.sin(2*x[0] + x[1])
+
 def standard_parabola(x):
     '''range = (-5,5)
     '''
