@@ -6,7 +6,56 @@ from jax import Array, grad, jit, random, vmap
 import jaxgp.regression as gpr
 from jaxgp.kernels import BaseKernel
 from jaxgp.utils import Logger
+   
 
+def compare_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: Array, in_dir: str, write: Callable):
+    '''Compares optimizers over different functions in multiple ways:
+    - how many true function values lie in the 68% and 95% confidence intervals
+    - the maximum difference between the mean and the true function values
+    - mean squared error over the whole grid
+    - maximum value of the standard deviation
+
+    Parameters
+    ----------
+    functions : list[Callable]
+        list of functions for which the optimizers should be compared
+    ranges : list[Tuple[float, float]]
+        list of ranges over which the functions were evaluated
+    names : list[str]
+        names of the functions
+    optimizers : str
+        different optimizers that are to be compared
+    num_gridpoints : Array
+        shape (num_x1, num_x2), number of grid points along each axis
+        Total number of gridpoints = Prod(num_gridpoints_i)
+    in_dir : str
+        directory in which the files to be compared are stored
+    write : Callable
+        function (str) -> Any, that somehow processes the information given in form of strings
+    '''
+    for fun, ran, name in zip(functions, ranges, names):
+        _, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)
+        Y = Y[:,0]
+        
+        write("-"*70 + "\n")
+        write(f"Current function: {name}\n")
+        
+        for optimizer in optimizers:
+            means = jnp.load(f"{in_dir}/{name}means{optimizer}.npz")
+            stds = jnp.load(f"{in_dir}/{name}stds{optimizer}.npz")
+
+            write(f"optimizer: {optimizer}\n")
+
+            for iter, (mean, std) in enumerate(zip(means.values(), stds.values())):
+                conf68 = jnp.where(jnp.abs(Y-mean) <= std, 0, 1)
+                conf95 = jnp.where(jnp.abs(Y-mean) <= 2*std, 0, 1)
+
+                mse = jnp.mean((Y-mean)**2)
+
+                maxdiff = jnp.max(jnp.abs(Y-mean))
+                maxstd = jnp.max(std)
+
+                write(f"iter {iter}: 68% = {jnp.mean(conf68):.5f}, 95% = {jnp.mean(conf95):.5f}, maxerr = {maxdiff:.5f}, mse = {mse:.5f}, maxstd = {maxstd:.5f}\n")
 
 def create_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: int, 
                           noise: Union[float, Array], seed: int, num_f_vals: int,  num_d_vals: int, kernel: BaseKernel, param_bounds: Tuple, 
@@ -70,56 +119,7 @@ def create_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, f
                 params.append(elem[0])
                 losses.append(elem[1])
             jnp.savez(f"{in_dir}/{name}params{optimizer}", *params)
-            jnp.savez(f"{in_dir}/{name}losses{optimizer}", *losses)   
-
-def compare_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: Array, in_dir: str, write: Callable):
-    '''Compares optimizers over different functions in multiple ways:
-    - how many true function values lie in the 68% and 95% confidence intervals
-    - the maximum difference between the mean and the true function values
-    - mean squared error over the whole grid
-    - maximum value of the standard deviation
-
-    Parameters
-    ----------
-    functions : list[Callable]
-        list of functions for which the optimizers should be compared
-    ranges : list[Tuple[float, float]]
-        list of ranges over which the functions were evaluated
-    names : list[str]
-        names of the functions
-    optimizers : str
-        different optimizers that are to be compared
-    num_gridpoints : Array
-        shape (num_x1, num_x2), number of grid points along each axis
-        Total number of gridpoints = Prod(num_gridpoints_i)
-    in_dir : str
-        directory in which the files to be compared are stored
-    write : Callable
-        function (str) -> Any, that somehow processes the information given in form of strings
-    '''
-    for fun, ran, name in zip(functions, ranges, names,):
-        _, Y = create_training_data_2D(0, num_gridpoints, ran, 0.0, fun)
-        Y = Y[:,0]
-        
-        write("-"*70 + "\n")
-        write(f"Current function: {name}\n")
-        
-        for optimizer in optimizers:
-            means = jnp.load(f"{in_dir}/{name}means{optimizer}.npz")
-            stds = jnp.load(f"{in_dir}/{name}stds{optimizer}.npz")
-
-            write(f"optimizer: {optimizer}\n")
-
-            for iter, (mean, std) in enumerate(zip(means.values(), stds.values())):
-                conf68 = jnp.where(jnp.abs(Y-mean) <= std, 0, 1)
-                conf95 = jnp.where(jnp.abs(Y-mean) <= 2*std, 0, 1)
-
-                mse = jnp.mean((Y-mean)**2)
-
-                maxdiff = jnp.max(jnp.abs(Y-mean))
-                maxstd = jnp.max(std)
-
-                write(f"iter {iter}: 68% = {jnp.mean(conf68):.5f}, 95% = {jnp.mean(conf95):.5f}, maxerr = {maxdiff:.5f}, mse = {mse:.5f}, maxstd = {maxstd:.5f}\n")
+            jnp.savez(f"{in_dir}/{name}losses{optimizer}", *losses)
 
 def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_vals: int, logger: Logger, kernel: BaseKernel, 
                    param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int) -> Tuple[Array, Array]:
