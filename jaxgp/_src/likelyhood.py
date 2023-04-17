@@ -43,9 +43,11 @@ def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array],
     _, logdet = jnp.linalg.slogdet(fit_matrix)
 
     # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-    mle = 0.5*(logdet + fit_vector@solve(fit_matrix, fit_vector, assume_a="pos"))
+    mle = 0.5*(logdet + 
+               fit_vector@solve(fit_matrix, fit_vector, assume_a="pos") + 
+               len(fit_vector)*jnp.log(2*jnp.pi))
     
-    return mle / 20000.0
+    return mle# / 20000.0
 
 @jit
 def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
@@ -89,10 +91,11 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array
 
     # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
     invert_matrix = K_ref*noise**2 + K_MN@K_MN.T
-    mle = 0.5*(logdet + (Y_data@Y_data -
-                    Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2)
+    mle = 0.5*(logdet + 
+               (Y_data@Y_data - Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2 + 
+               len(Y_data)*jnp.log(2*jnp.pi))
     
-    return mle / 20000.0
+    return mle# / 20000.0
 
 # def sparse_negativeLogLikelyhood(self, params: Array, Y_data: Array, X_ref: Array, X_split: list[Array]) -> float:
 #     '''
