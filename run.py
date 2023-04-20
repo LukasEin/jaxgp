@@ -5,7 +5,7 @@ from jaxgp.utils import Logger
 from jaxgp.kernels import RBF
 
 def main():
-    optimizers = ["SLSQP",]#["L-BFGS-B", "TNC", "SLSQP"]
+    optimizers = ["L-BFGS-B"]#, "TNC", "SLSQP"]
     fun = lambda x: testfunctions.himmelblau(x)/800.0
     num_gridpoints = jnp.array([100,100])
     ran = (jnp.array([-5.0,5.0]), jnp.array([-5.0,5.0]))
@@ -19,7 +19,7 @@ def main():
     grid2 = jnp.linspace(*ran[1],100)
     grid = jnp.array(jnp.meshgrid(grid1, grid2)).reshape(2,-1).T
 
-    f_vals = [5,]#[20, 50]
+    f_vals = [20,]#[20, 50]
     d_vals = [800,]#[5, 20, 50, 100, 200, 400, 800]
 
     kernel = RBF(3)
