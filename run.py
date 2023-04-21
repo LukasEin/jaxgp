@@ -2,14 +2,14 @@ import jax.numpy as jnp
 from jaxgp.tests import testfunctions, optimizertesting
 
 from jaxgp.utils import Logger
-from jaxgp.kernels import RBF
+from jaxgp.kernels import RBF, Periodic
 
 def main():
     optimizers = ["L-BFGS-B", "TNC", "SLSQP"]
     fun = testfunctions.sin2d
     num_gridpoints = jnp.array([100,100])
 
-    in_dir = "./data_files/different_number_of_datapoints/extended"
+    in_dir = "./data_files/different_number_of_datapoints/extended/periodic"
 
     noise = 0.1
     seed = 0
@@ -17,7 +17,8 @@ def main():
     f_vals = [1, 5, 20, 50]
     d_vals = [5, 20, 50, 100, 200, 400, 800]
 
-    kernel = RBF(3)
+    # kernel = RBF(3)
+    kernel = Periodic()
     param_shape = (3,)
     param_bounds = (1e-3, 10.0)
 

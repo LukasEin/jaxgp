@@ -171,6 +171,43 @@ class Linear(BaseKernel):
             Scalar value that describes the covariance between the points.
         '''
         return jnp.inner(x1 * params[1:], x2) + params[0]
+    
+@register_pytree_node_class
+class Periodic(BaseKernel):
+    '''Kernel based on radial basis function / gaussian
+    '''
+    def __init__(self, num_params = 3):
+        '''
+        Parameters
+        ----------
+        num_params : int, optional
+            by default 2, if changed must be set to n_features + 1, according to the input data.
+        '''
+        super().__init__()
+
+        self.num_params = num_params
+    
+    def eval(self, x1, x2, params):
+        '''covariance between two function evaluations at x1 and x2 
+        according to the RBF kernel.
+
+        Parameters
+        ----------
+        x1 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        x2 : Array
+            shape (n_features, ). Corresponds to a function evaluation.
+        params : Array
+            shape (num_params, ). kernel parameters, the first is a multiplicative constant, 
+                                the rest a scale parameter of the inputs
+
+        Returns
+        -------
+        float
+            Scalar value that describes the covariance between the points.
+        '''
+        periodic = jnp.sin(jnp.pi*(x1-x2)/params[1])**2
+        return params[0]*jnp.exp(-(2 / params[2]**2) * jnp.sum(periodic))
 
 @register_pytree_node_class
 class SumKernel(BaseKernel):
