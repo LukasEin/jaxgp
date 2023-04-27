@@ -3,9 +3,9 @@ from typing import Callable, Tuple, Union
 import jax.numpy as jnp
 from jax import Array, grad, jit, random, vmap
 
-import jaxgp.regression as gpr
-from jaxgp.kernels import BaseKernel
-from jaxgp.utils import Logger
+from .._src.regression import ExactGPR
+from .._src.kernels import BaseKernel
+from .._src.logger import Logger
    
 
 def compare_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: Array, in_dir: str, write: Callable):
@@ -190,7 +190,7 @@ def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_v
         init_params = random.uniform(subkey, param_shape, minval=param_bounds[0], maxval=param_bounds[1])
         logger.log(f"# iter {i+1}: init params {init_params}")
 
-        model = gpr.ExactGPR(kernel, init_params, noise, optimize_method=optimizer, logger=logger)
+        model = ExactGPR(kernel, init_params, noise, optimize_method=optimizer, logger=logger)
         model.train(X, Y, data_split=data_split)
         m, s = model.eval(evalgrid)
         means.append(m)
