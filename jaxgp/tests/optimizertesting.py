@@ -181,7 +181,8 @@ def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_v
     data_split = jnp.array([num_f_vals, num_d_vals, num_d_vals])
 
     if sparse:
-        num_ref_points = int((num_d_vals + num_f_vals)*ref)
+        num_ref_points = int((num_d_vals + num_f_vals)*ref + 1)
+
         key, subkey = random.split(key)
         ref_perm = random.permutation(subkey, num_d_vals + num_f_vals)[:num_ref_points]
         X_ref = X[ref_perm]
