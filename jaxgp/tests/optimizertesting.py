@@ -114,12 +114,9 @@ def create_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, f
             jnp.savez(f"{in_dir}/{name}means{optimizer}", *means)
             jnp.savez(f"{in_dir}/{name}stds{optimizer}", *stds)
             params = []
-            losses = []
             for elem in logger.iters_list:
                 params.append(elem[0])
-                losses.append(elem[1])
-            jnp.savez(f"{in_dir}/{name}params{optimizer}", *params)
-            jnp.savez(f"{in_dir}/{name}losses{optimizer}", *losses)
+            jnp.savez(f"{in_dir}/{name}params{optimizer}_seed{seed}", *params)
 
 def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_vals: int, logger: Logger, kernel: BaseKernel, 
                    param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int) -> Tuple[Array, Array]:

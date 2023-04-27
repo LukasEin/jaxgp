@@ -1,8 +1,7 @@
 import jax.numpy as jnp
 import time
-from jax import vmap
 
-from typing import Tuple, Callable
+from typing import Tuple
 
 class Logger:
     '''A simple logger to write out the convergence process of the optimization
@@ -29,33 +28,10 @@ class Logger:
         '''
         self.buffer.append(output)
 
-    def write(self, loss: Callable):
-        '''called after the optimization to write the parameters and 
-        the corresponding loss values to a log file
-
-        Parameters
-        ----------
-        loss : Callable
-            loss function that takes the parameters in the buffer as input
+    def write(self):
+        '''called after the optimization to save the parameters of the current optimization run
         '''
-        if self.buffer:
-            params = jnp.array(self.buffer)
-            fun = vmap(loss, in_axes=0)
-            losses = fun(params)
-
-            self.iters_list.append((params, losses))
-
-            with open(self.name, mode="a") as f:
-                f.write("# num_iter   params   loss\n")
-                for i,(param, loss) in enumerate(zip(params, losses)):
-                    f.write(f"{i+1}   {param}   {loss}\n")
-
-                f.write("-"*30 + "\n\n")
-        
-        else:
-            with open(self.name, mode="a") as f:
-                f.write("# num_iter   params   loss\n")
-                f.write("-"*30 + "\n\n")
+        self.iters_list.append(jnp.array(self.buffer))
 
         self.buffer = []
 

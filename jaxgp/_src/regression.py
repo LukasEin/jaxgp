@@ -8,9 +8,6 @@ from . import covar, likelyhood, predict
 from .kernels import BaseKernel
 from .logger import Logger
 
-from scipy.optimize import minimize
-from jax import grad
-
 
 class ExactGPR:
     '''A full Gaussian Process regressor model
@@ -66,8 +63,7 @@ class ExactGPR:
         print(result)
         self.kernel_params = result.params
         if self.logger is not None:
-            loss = lambda x: likelyhood.full_kernelNegativeLogLikelyhood(x, self.X_split, Y_data, self.noise, self.kernel)
-            self.logger.write(loss)
+            self.logger.write()
 
         self.fit_matrix = covar.full_covariance_matrix(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.fit_vector = Y_data
@@ -146,8 +142,7 @@ class SparseGPR:
         print(result)
         self.kernel_params = result.params
         if self.logger is not None:
-            loss = lambda x: likelyhood.full_kernelNegativeLogLikelyhood(x, self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
-            self.logger.write(loss)
+            self.logger.write()
         self.fit_matrix, self.fit_vector = covar.sparse_covariance_matrix(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
     def eval(self, X: Array) -> Tuple[Array, Array]:
