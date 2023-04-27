@@ -3,7 +3,7 @@ from typing import Callable, Tuple, Union
 import jax.numpy as jnp
 from jax import Array, grad, jit, random, vmap
 
-from .._src.regression import ExactGPR
+from .._src.regression import ExactGPR, SparseGPR
 from .._src.kernels import BaseKernel
 from .._src.logger import Logger
    
@@ -118,8 +118,9 @@ def create_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, f
                 params.append(elem[0])
             jnp.savez(f"{in_dir}/{name}params{optimizer}_seed{seed}", *params)
 
-def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_vals: int, logger: Logger, kernel: BaseKernel, 
-                   param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], optimizer: str,  iters: int, evalgrid: Array, seed: int) -> Tuple[Array, Array]:
+def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_vals: int, logger: Logger, 
+                        kernel: BaseKernel, param_bounds: Tuple, param_shape: Tuple, noise: Union[float, Array], 
+                        optimizer: str,  iters: int, evalgrid: Array, seed: int, *, sparse: bool=False, ref=0.1) -> Tuple[Array, Array]:
     '''Takes the full training set and creates a random subset to fit an exact gpr to.
 
     Parameters
@@ -167,27 +168,33 @@ def create_test_data_2D(X_train: Array, Y_train: Array, num_f_vals: int, num_d_v
     key, subkey = random.split(key)
     fun_perm = random.permutation(subkey, num_datapoints)[:num_f_vals]
     key, subkey = random.split(key)
-    d1_perm = random.permutation(subkey, num_datapoints)[:num_d_vals]
-    # key, subkey = random.split(key)
-    # d2_perm = random.permutation(subkey, num_datapoints)[:num_d_vals]
+    d_perm = random.permutation(subkey, num_datapoints)[:num_d_vals]
 
     X_fun = X_train[fun_perm]
     Y_fun = Y_train[fun_perm,0]
-    X_d1 = X_train[d1_perm]
-    Y_d1 = Y_train[d1_perm,1]
-    X_d2 = X_train[d1_perm]
-    Y_d2 = Y_train[d1_perm,2]
+    X_d = X_train[d_perm]
+    Y_d1 = Y_train[d_perm,1]
+    Y_d2 = Y_train[d_perm,2]
 
-    X = jnp.vstack((X_fun, X_d1, X_d2))
+    X = jnp.vstack((X_fun, X_d, X_d))
     Y = jnp.hstack((Y_fun, Y_d1, Y_d2))
     data_split = jnp.array([num_f_vals, num_d_vals, num_d_vals])
+
+    if sparse:
+        num_ref_points = int((num_d_vals + num_f_vals)*ref)
+        key, subkey = random.split(key)
+        ref_perm = random.permutation(subkey, num_d_vals + num_f_vals)[:num_ref_points]
+        X_ref = X[ref_perm]
 
     for i in range(iters):
         key, subkey = random.split(key)
         init_params = random.uniform(subkey, param_shape, minval=param_bounds[0], maxval=param_bounds[1])
         logger.log(f"# iter {i+1}: init params {init_params}")
-
-        model = ExactGPR(kernel, init_params, noise, optimize_method=optimizer, logger=logger)
+        
+        if sparse:
+            model = SparseGPR(kernel, init_params, noise, X_ref, optimize_method=optimizer, logger=logger)
+        else:
+            model = ExactGPR(kernel, init_params, noise, optimize_method=optimizer, logger=logger)
         model.train(X, Y, data_split=data_split)
         m, s = model.eval(evalgrid)
         means.append(m)
