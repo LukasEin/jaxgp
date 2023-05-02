@@ -15,9 +15,6 @@ class Logger:
         self.buffer = []
         self.iters_list = []
 
-        with open(self.name, mode="w") as f:
-            pass
-
     def __call__(self, output: Tuple) -> None:
         '''Appends the current parameters in the iteration to the buffer
 
