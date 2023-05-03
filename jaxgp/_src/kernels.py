@@ -38,7 +38,7 @@ class BaseKernel:
         '''
         raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
     
-    def grad2(self, x1: Array, x2: Array, index: int, params: Array) -> float:
+    def grad2(self, x1: Array, x2: Array, params: Array) -> float:
         '''covariance between a function evaluation at x1 and a derivative evaluation at x2.
 
         Parameters
@@ -57,9 +57,9 @@ class BaseKernel:
         float
             scalar value that describes the covariance between the points
         '''
-        return self._df(x1, x2, params)[index]
+        return self._df(x1, x2, params)
     
-    def jac(self, x1: Array, x2: Array, index_1: int, index_2: int, params: Array) -> float:
+    def jac(self, x1: Array, x2: Array, params: Array) -> float:
         '''double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
 
         Parameters
@@ -80,7 +80,7 @@ class BaseKernel:
         float
             scalar value that describes the covariance between the points
         '''
-        return self._ddf(x1, x2, params)[index_1, index_2]
+        return self._ddf(x1, x2, params)
 
     def __add__(self, other):
         return SumKernel(self, other)

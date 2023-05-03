@@ -1,7 +1,7 @@
 from typing import Tuple, Union
 
 import jax.numpy as jnp
-from jax import Array, jit
+from jax import Array, jit, vmap
 from jax.scipy.linalg import solve
 
 from .utils import (_build_xT_Ainv_x, _CovMatrix_Grad, _CovMatrix_Kernel,
@@ -38,10 +38,9 @@ def full_predict(X: Array, full_covmatrix: Array, Y_data: Array, X_split: Array,
     Tuple[Array, Array]
         Posterior means and stds, [mean(x), std(x) for x in X]
     '''
-    full_vectors = _CovMatrix_Kernel(X, X_split[0], kernel, params=params)
-    for i,elem in enumerate(X_split[1:]):
-        deriv_vectors = _CovMatrix_Grad(X, elem, kernel, params=params, index=i)
-        full_vectors = jnp.concatenate((full_vectors,deriv_vectors),axis=1)
+    function_vectors = _CovMatrix_Kernel(X, X_split[0], kernel, params)
+    derivative_vectors = vmap(jnp.ravel,in_axes=0)(_CovMatrix_Grad(X, X_split[1], kernel, params))
+    full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
     means = full_vectors@solve(full_covmatrix,Y_data,assume_a="pos")
 

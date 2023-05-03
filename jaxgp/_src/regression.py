@@ -37,7 +37,7 @@ class ExactGPR:
         self.optimize_method = optimize_method
         self.logger = logger
 
-    def train(self, X_data: Union[Array, list[Array]], Y_data: Array, *, data_split: Tuple = None) -> None:
+    def train(self, X_data: Tuple[Array, Array], Y_data: Array) -> None:
         '''Fits a full gaussian process to the input data by optimizing the parameters of the model.
 
         Parameters
@@ -52,11 +52,7 @@ class ExactGPR:
             shape (1 + n_features, ) if X_data is Array, None if X_data is List[Array]
             describes the how many of each type of evaluation in X_data are present.
         '''
-        if data_split is None:
-            self.X_split = X_data
-        else:
-            sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
-            self.X_split = jnp.split(X_data, sum_splits)
+        self.X_split = X_data
 
         solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood, method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.noise, self.kernel)
@@ -116,7 +112,7 @@ class SparseGPR:
         self.optimize_method = optimize_method
         self.logger = logger
 
-    def train(self, X_data: Union[Array, list[Array]], Y_data: Array, *, data_split: Tuple = None) -> None:
+    def train(self, X_data: Tuple[Array, Array], Y_data: Array) -> None:
         '''Fits a sparse (PPA) gaussian process to the input data by optimizing the parameters of the model.
 
         Parameters
@@ -131,11 +127,7 @@ class SparseGPR:
             shape (1 + n_features, ) if X_data is Array, None if X_data is List[Array]
             describes the how many of each type of evaluation in X_data are present.
         '''
-        if data_split is None:
-            self.X_split = X_data
-        else:
-            sum_splits = [jnp.sum(data_split[:i+1]) for i,_ in enumerate(data_split[1:])]
-            self.X_split = jnp.split(X_data, sum_splits)
+        self.X_split = X_data
 
         solver = ScipyBoundedMinimize(fun=likelyhood.sparse_kernelNegativeLogLikelyhood, method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)

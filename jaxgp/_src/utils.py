@@ -73,7 +73,7 @@ def _CovMatrix_Kernel(X1: Array, X2: Array, kernel: BaseKernel, params: Array) -
     return func(X1, X2)
 
 @jit
-def _CovMatrix_Grad(X1: Array, X2: Array, kernel: BaseKernel, params: Array, index: int) -> Array:
+def _CovMatrix_Grad(X1: Array, X2: Array, kernel: BaseKernel, params: Array) -> Array:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 representing values of the target function and X2
     representing derivative values of the target function.
@@ -96,12 +96,12 @@ def _CovMatrix_Grad(X1: Array, X2: Array, kernel: BaseKernel, params: Array, ind
     Array
         shape (N1, N2), [dK(x1, x2) / dx2[index2] for (x1, x2) in (X1, X2)]
     '''
-    func = lambda v1, v2: kernel.grad2(v1, v2, index, params) 
+    func = lambda v1, v2: kernel.grad2(v1, v2, params) 
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)
 
 @jit
-def _CovMatrix_Hess(X1: Array, X2: Array, kernel: BaseKernel, params: Array, index_1: int, index_2: int) -> Array:
+def _CovMatrix_Hess(X1: Array, X2: Array, kernel: BaseKernel, params: Array) -> Array:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 and X2 representing derivative values of the target function.
 
@@ -125,6 +125,6 @@ def _CovMatrix_Hess(X1: Array, X2: Array, kernel: BaseKernel, params: Array, ind
     Array
         shape (N1, N2), [dK(x1, x2) / (dx1[index1]*dx2[index2]) for (x1, x2) in (X1, X2)]
     '''
-    func = lambda v1, v2: kernel.jac(v1, v2, index_1, index_2, params) 
+    func = lambda v1, v2: kernel.jac(v1, v2, params)
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)

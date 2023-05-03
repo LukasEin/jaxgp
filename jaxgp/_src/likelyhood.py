@@ -1,7 +1,7 @@
 from typing import Union
 
 import jax.numpy as jnp
-from jax import Array, jit
+from jax import Array, jit, vmap
 from jax.scipy.linalg import solve
 
 from .covar import full_covariance_matrix
@@ -75,10 +75,10 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array
         Negative Log Likelyhood estimate for PPA
     '''
     # calculates the covariance between the data and the reference points
-    K_MN = _CovMatrix_Kernel(X_ref, X_split[0], kernel, kernel_params)
-    for i,elem in enumerate(X_split[1:]):
-        K_deriv = _CovMatrix_Grad(X_ref, elem, kernel, kernel_params, index=i)
-        K_MN = jnp.concatenate((K_MN,K_deriv),axis=1)
+    KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, kernel_params)
+    KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, kernel_params))
+    
+    K_MN = jnp.vstack((KF,KD.T))
 
     # calculates the covariance between the reference points
     K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, kernel_params)
