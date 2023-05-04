@@ -71,7 +71,6 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
         sparse (PPA) covariance matrix, projected input labels
     '''
     # calculates the covariance between the training points and the reference points
-
     KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, params)
     KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, params))
     
