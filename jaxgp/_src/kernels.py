@@ -10,6 +10,10 @@ from dataclasses import dataclass, field
 class BaseKernel:
     '''Kernel base-class. Defines the needed derivatives of a kernel based 
     on the eval method. In each derived class the eval method must be overwritten.
+    
+    Parameters
+    ----------
+    num_params : int, optional
     '''
     num_params: int = 0
     
@@ -101,6 +105,7 @@ class BaseKernel:
 @register_pytree_node_class
 class RBF(BaseKernel):
     '''Kernel based on radial basis function / gaussian
+
     Parameters
     ----------
     num_params : int, optional
@@ -133,6 +138,7 @@ class RBF(BaseKernel):
 @register_pytree_node_class    
 class Linear(BaseKernel):
     '''kernel based on the dot-product of the two input vectors
+
     Parameters
     ----------
     num_params : int, optional
@@ -164,6 +170,7 @@ class Linear(BaseKernel):
 @register_pytree_node_class
 class Periodic(BaseKernel):
     '''Kernel based on radial basis function / gaussian
+    
     Parameters
     ----------
     num_params : int, optional

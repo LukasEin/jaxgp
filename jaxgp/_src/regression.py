@@ -8,34 +8,33 @@ from . import covar, likelyhood, predict
 from .kernels import BaseKernel
 from .logger import Logger
 
+from dataclasses import dataclass
 
+@dataclass
 class ExactGPR:
     '''A full Gaussian Process regressor model
-    '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: ndarray, noise: Union[float, ndarray], *, optimize_method="l-bfgs-b", logger: Logger = None) -> None:
-        '''
-        Parameters
-        ----------
-        kernel : derived class from BaseKernel
-            Kernel that describes the covariance between input points.
-        init_kernel_params : ndarray
-            initial kernel parameters for the optimization
-        noise : Union[float, ndarray]
-            noise present in the input labels
-            either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
-            Else each value is added to the corresponding diagonal block coming from X_split
-        optimize_method : str, optional
-            method to use in the optimizing process of the model parameters
-        logger : Logger, optional
-            If given must be a class with a __call__ method and a write method, by default None
-            Logs the results of the optimization procedure.
-        '''
-        self.kernel = kernel
-        self.kernel_params = jnp.array(init_kernel_params)
-        self.noise = noise
 
-        self.optimize_method = optimize_method
-        self.logger = logger
+    Parameters
+    ----------
+    kernel : derived class from BaseKernel
+        Kernel that describes the covariance between input points.
+    init_kernel_params : ndarray
+        initial kernel parameters for the optimization
+    noise : Union[float, ndarray]
+        noise present in the input labels
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+        Else each value is added to the corresponding diagonal block coming from X_split
+    optimize_method : str, optional
+        method to use in the optimizing process of the model parameters
+    logger : Logger, optional
+        If given must be a class with a __call__ method and a write method, by default None
+        Logs the results of the optimization procedure.
+    '''
+    kernel: BaseKernel
+    kernel_params: ndarray
+    noise: Union[float, ndarray]
+    optimize_method:str = "L-BFGS-B"
+    logger: Logger = None
 
     def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
         '''Fits a full gaussian process to the input data by optimizing the parameters of the model.
@@ -79,38 +78,35 @@ class ExactGPR:
         '''
         return predict.full_predict(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
     
+@dataclass    
 class SparseGPR:
     '''a sparse (PPA) Gaussian Process Regressor model.
     The full gaussian process is projected into a smaller subspace for computational efficiency
+    
+    Parameters
+    ----------
+    kernel : derived class from BaseKernel
+        Kernel that describes the covariance between input points.
+    init_kernel_params : ndarray
+        initial kernel parameters for the optimization
+    noise : Union[float, ndarray]
+        noise present in the input labels
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+        Else each value is added to the corresponding diagonal block coming from X_split
+    X_ref : ndarray
+        shape (n_referencepoints, n_features). Reference points onto which the gaussian process is projected.
+    optimize_method : str, optional
+        method to use in the optimizing process of the model parameters
+    logger : Logger, optional
+        If given must be a class with a __call__ method and a write method, by default None
+        Logs the results of the optimization procedure.
     '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: ndarray, noise: Union[float, ndarray], X_ref: ndarray, *, optimize_method="l-bfgs-b", logger=None) -> None:
-        '''
-        Parameters
-        ----------
-        kernel : derived class from BaseKernel
-            Kernel that describes the covariance between input points.
-        init_kernel_params : ndarray
-            initial kernel parameters for the optimization
-        noise : Union[float, ndarray]
-            noise present in the input labels
-            either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
-            Else each value is added to the corresponding diagonal block coming from X_split
-        X_ref : ndarray
-            shape (n_referencepoints, n_features). Reference points onto which the gaussian process is projected.
-        optimize_method : str, optional
-            method to use in the optimizing process of the model parameters
-        logger : Logger, optional
-            If given must be a class with a __call__ method and a write method, by default None
-            Logs the results of the optimization procedure.
-        '''
-        self.kernel = kernel
-        self.kernel_params = jnp.array(init_kernel_params)
-        self.noise = noise
-
-        self.X_ref = X_ref
-
-        self.optimize_method = optimize_method
-        self.logger = logger
+    kernel: BaseKernel
+    kernel_params: ndarray
+    noise: Union[float, ndarray]
+    X_ref: ndarray
+    optimize_method:str = "L-BFGS-B"
+    logger: Logger = None
 
     def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
         '''Fits a sparse (PPA) gaussian process to the input data by optimizing the parameters of the model.
