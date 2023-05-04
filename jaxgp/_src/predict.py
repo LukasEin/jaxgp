@@ -1,7 +1,8 @@
 from typing import Tuple, Union
 
 import jax.numpy as jnp
-from jax import Array, jit, vmap
+from jax.numpy import ndarray
+from jax import jit, vmap
 from jax.scipy.linalg import solve
 
 from .utils import (_build_xT_Ainv_x, _CovMatrix_Grad, _CovMatrix_Kernel,
@@ -10,32 +11,32 @@ from .kernels import BaseKernel
 
 
 @jit
-def full_predict(X: Array, full_covmatrix: Array, Y_data: Array, X_split: Array, kernel: BaseKernel, params: Array) -> Tuple[Array, Array]:
+def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of full_covmatrix and Y_data for the full gpr model
 
     Parameters
     ----------
-    X : Array
-        Array of shape (n_points, n_features). For each point the posterior mean and std are calculated
-    full_covmatrix : Array
+    X : ndarray
+        ndarray of shape (n_points, n_features). For each point the posterior mean and std are calculated
+    full_covmatrix : ndarray
         prior covariance matrix of shape (n_samples, n_samples)
-    Y_data : Array
-        Array of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
-    X_split : Array
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    noise : Union[Array, float]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    Y_data : ndarray
+        ndarray of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
+    X_split : ndarray
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    noise : Union[ndarray, float]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    params : Array
+    params : ndarray
         kernel parameters
 
     Returns
     -------
-    Tuple[Array, Array]
+    Tuple[ndarray, ndarray]
         Posterior means and stds, [mean(x), std(x) for x in X]
     '''
     function_vectors = _CovMatrix_Kernel(X, X_split[0], kernel, params)
@@ -51,34 +52,34 @@ def full_predict(X: Array, full_covmatrix: Array, Y_data: Array, X_split: Array,
     return means, stds
 
 @jit
-def sparse_predict(X: Array, sparse_covmatrix: Array, projected_labels: Array, X_ref: Array, noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Tuple[Array, Array]:
+def sparse_predict(X: ndarray, sparse_covmatrix: ndarray, projected_labels: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of sparse_covmatrix and projected labels in the sparse (PPA) gpr model
 
     Parameters
     ----------
-    X : Array
-        Array of shape (n_points, n_features). For each point the posterior mean and std are calculated
-    full_covmatrix : Array
+    X : ndarray
+        ndarray of shape (n_points, n_features). For each point the posterior mean and std are calculated
+    full_covmatrix : ndarray
         prior covariance matrix of shape (n_samples, n_samples)
-    projected_labels : Array
-        Array of shape (n_referencepoints,). Labels projected into the reference space via K_MN
-    X_ref : Array
-        Array of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
-    X_split : Array
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    noise : Union[Array, float]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    projected_labels : ndarray
+        ndarray of shape (n_referencepoints,). Labels projected into the reference space via K_MN
+    X_ref : ndarray
+        ndarray of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
+    X_split : ndarray
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    noise : Union[ndarray, float]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    params : Array
+    params : ndarray
         kernel parameters
 
     Returns
     -------
-    Tuple[Array, Array]
+    Tuple[ndarray, ndarray]
         Posterior means and stds, [mean(x), std(x) for x in X]
     '''
     ref_vectors = _CovMatrix_Kernel(X, X_ref, kernel, params)

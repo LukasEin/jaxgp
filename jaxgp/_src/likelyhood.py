@@ -1,7 +1,8 @@
 from typing import Union
 
 import jax.numpy as jnp
-from jax import Array, jit, vmap
+from jax.numpy import ndarray
+from jax import jit, vmap
 from jax.scipy.linalg import solve
 
 from .covar import full_covariance_matrix
@@ -9,22 +10,22 @@ from .kernels import BaseKernel
 from .utils import _CovMatrix_Grad, _CovMatrix_Kernel
 
 @jit 
-def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
+def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for full GPR. Y_data ~ N(0,[id*s**2 + K_NN]).
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
 
     Parameters
     ----------
-    kernel_params : Array
+    kernel_params : ndarray
         kernel parameters. Function can be optimized w.r.t to these parameters
-    X_split : list[Array]
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    Y_data : Array
-        Array of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
-    noise : Union[Array, float]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    X_split : list[ndarray]
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    Y_data : ndarray
+        ndarray of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
+    noise : Union[ndarray, float]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
 
@@ -48,24 +49,24 @@ def full_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array],
     return nlle
 
 @jit
-def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array], Y_data: Array, X_ref: Array, noise: Union[Array, float], kernel: BaseKernel) -> float:
+def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for sparse GPR (PPA). Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN]) which is the same as for Nystrom approximation.
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
 
     Parameters
     ----------
-    kernel_params : Array
+    kernel_params : ndarray
         kernel parameters. Function can be optimized w.r.t to these parameters
-    X_split : list[Array]
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    Y_data : Array
-        Array of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
-    X_ref : Array
-        Array of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
-    noise : Union[Array, float]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    X_split : list[ndarray]
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    Y_data : ndarray
+        ndarray of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
+    X_ref : ndarray
+        ndarray of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
+    noise : Union[ndarray, float]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
 

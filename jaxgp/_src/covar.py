@@ -2,32 +2,33 @@ from typing import Tuple, Union
 from functools import partial
 
 import jax.numpy as jnp
-from jax import Array, jit, vmap
+from jax import jit, vmap
+from jax.numpy import ndarray
 
 from .kernels import BaseKernel
 from .utils import _CovMatrix_Grad, _CovMatrix_Hess, _CovMatrix_Kernel
 
 
 @jit
-def full_covariance_matrix(X_split: Tuple[Array, Array], noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Array:
+def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Calculates the full covariance matrix over the input samples in X_split.
 
     Parameters
     ----------
-    X_split : list[Array]
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    noise : Union[float, Array]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    X_split : list[ndarray]
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    noise : Union[float, ndarray]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split.
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    params : Array
+    params : ndarray
         Kernel parameters
 
     Returns
     -------
-    Array
+    ndarray
         full covariance matrix
     '''
     # Build the full covariance Matrix between all datapoints in X_data depending on if they   
@@ -44,30 +45,30 @@ def full_covariance_matrix(X_split: Tuple[Array, Array], noise: Union[float, Arr
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
 @jit
-def sparse_covariance_matrix(X_split: Tuple[Array, Array], Y_data: Array, X_ref: Array, noise: Union[float, Array], kernel: BaseKernel, params: Array) -> Tuple[Array, Array]:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
     and the projected input labels in Y_data according to the Projected Process Approximation.
 
     Parameters
     ----------
-    X_split : list[Array]
-        List of Arrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
-    Y_data : Array
-        Array of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
-    X_ref : Array
-        Array of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
-    noise : Union[float, Array]
-        either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+    X_split : list[ndarray]
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    Y_data : ndarray
+        ndarray of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
+    X_ref : ndarray
+        ndarray of shape (n_referencepoints, n_features). Reference points onto which the whole input dataset is projected.
+    noise : Union[float, ndarray]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
         Else each value is added to the corresponding diagonal block coming from X_split
-        Array is not supported yet!!!
+        ndarray is not supported yet!!!
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    params : Array
+    params : ndarray
         Kernel parameters
 
     Returns
     -------
-    Tuple[Array, Array]
+    Tuple[ndarray, ndarray]
         sparse (PPA) covariance matrix, projected input labels
     '''
     # calculates the covariance between the training points and the reference points

@@ -1,7 +1,7 @@
 from typing import Tuple, Union
 
 import jax.numpy as jnp
-from jax import Array
+from jax.numpy import ndarray
 from jaxopt import ScipyBoundedMinimize
 
 from . import covar, likelyhood, predict
@@ -12,17 +12,17 @@ from .logger import Logger
 class ExactGPR:
     '''A full Gaussian Process regressor model
     '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], *, optimize_method="l-bfgs-b", logger: Logger = None) -> None:
+    def __init__(self, kernel: BaseKernel, init_kernel_params: ndarray, noise: Union[float, ndarray], *, optimize_method="l-bfgs-b", logger: Logger = None) -> None:
         '''
         Parameters
         ----------
         kernel : derived class from BaseKernel
             Kernel that describes the covariance between input points.
-        init_kernel_params : Array
+        init_kernel_params : ndarray
             initial kernel parameters for the optimization
-        noise : Union[float, Array]
+        noise : Union[float, ndarray]
             noise present in the input labels
-            either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+            either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
             Else each value is added to the corresponding diagonal block coming from X_split
         optimize_method : str, optional
             method to use in the optimizing process of the model parameters
@@ -37,19 +37,19 @@ class ExactGPR:
         self.optimize_method = optimize_method
         self.logger = logger
 
-    def train(self, X_data: Tuple[Array, Array], Y_data: Array) -> None:
+    def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
         '''Fits a full gaussian process to the input data by optimizing the parameters of the model.
 
         Parameters
         ----------
-        X_data : Union[Array, list[Array]]
+        X_data : Union[ndarray, list[ndarray]]
             shape either (n_samples, n_features) or [(n_samples_1, n_features), ..., (n_samples_N, n_features)]
-            sum(n_samples_i) = n_samples. If given in form List[Array] the order must be 
+            sum(n_samples_i) = n_samples. If given in form List[ndarray] the order must be 
             [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
-        Y_data : Array
+        Y_data : ndarray
             shape (n_samples, ). labels corresponding to the elements in X_data
         data_split : Tuple, optional
-            shape (1 + n_features, ) if X_data is Array, None if X_data is List[Array]
+            shape (1 + n_features, ) if X_data is ndarray, None if X_data is List[ndarray]
             describes the how many of each type of evaluation in X_data are present.
         '''
         self.X_split = X_data
@@ -64,17 +64,17 @@ class ExactGPR:
         self.fit_matrix = covar.full_covariance_matrix(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.fit_vector = Y_data
 
-    def eval(self, X: Array) -> Tuple[Array, Array]:
+    def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
 
         Parameters
         ----------
-        X : Array
+        X : ndarray
             shape (N, n_features). Set of points for which to calculate the posterior means and stds
 
         Returns
         -------
-        Tuple[Array, Array]
+        Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
         return predict.full_predict(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
@@ -83,19 +83,19 @@ class SparseGPR:
     '''a sparse (PPA) Gaussian Process Regressor model.
     The full gaussian process is projected into a smaller subspace for computational efficiency
     '''
-    def __init__(self, kernel: BaseKernel, init_kernel_params: Array, noise: Union[float, Array], X_ref: Array, *, optimize_method="l-bfgs-b", logger=None) -> None:
+    def __init__(self, kernel: BaseKernel, init_kernel_params: ndarray, noise: Union[float, ndarray], X_ref: ndarray, *, optimize_method="l-bfgs-b", logger=None) -> None:
         '''
         Parameters
         ----------
         kernel : derived class from BaseKernel
             Kernel that describes the covariance between input points.
-        init_kernel_params : Array
+        init_kernel_params : ndarray
             initial kernel parameters for the optimization
-        noise : Union[float, Array]
+        noise : Union[float, ndarray]
             noise present in the input labels
-            either scalar or Array of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+            either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
             Else each value is added to the corresponding diagonal block coming from X_split
-        X_ref : Array
+        X_ref : ndarray
             shape (n_referencepoints, n_features). Reference points onto which the gaussian process is projected.
         optimize_method : str, optional
             method to use in the optimizing process of the model parameters
@@ -112,19 +112,19 @@ class SparseGPR:
         self.optimize_method = optimize_method
         self.logger = logger
 
-    def train(self, X_data: Tuple[Array, Array], Y_data: Array) -> None:
+    def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
         '''Fits a sparse (PPA) gaussian process to the input data by optimizing the parameters of the model.
 
         Parameters
         ----------
-        X_data : Union[Array, list[Array]]
+        X_data : Union[ndarray, list[ndarray]]
             shape either (n_samples, n_features) or [(n_samples_1, n_features), ..., (n_samples_N, n_features)]
-            sum(n_samples_i) = n_samples. If given in form List[Array] the order must be 
+            sum(n_samples_i) = n_samples. If given in form List[ndarray] the order must be 
             [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
-        Y_data : Array
+        Y_data : ndarray
             shape (n_samples, ). labels corresponding to the elements in X_data
         data_split : Tuple, optional
-            shape (1 + n_features, ) if X_data is Array, None if X_data is List[Array]
+            shape (1 + n_features, ) if X_data is ndarray, None if X_data is List[ndarray]
             describes the how many of each type of evaluation in X_data are present.
         '''
         self.X_split = X_data
@@ -137,17 +137,17 @@ class SparseGPR:
             self.logger.write()
         self.fit_matrix, self.fit_vector = covar.sparse_covariance_matrix(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
-    def eval(self, X: Array) -> Tuple[Array, Array]:
+    def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
 
         Parameters
         ----------
-        X : Array
+        X : ndarray
             shape (N, n_features). Set of points for which to calculate the posterior means and stds
 
         Returns
         -------
-        Tuple[Array, Array]
+        Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
         return predict.sparse_predict(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)

@@ -1,29 +1,28 @@
 import jax.numpy as jnp
-from jax import Array, jacfwd, jacrev
+from jax import jacfwd, jacrev
+from jax.numpy import ndarray
 from jax.tree_util import register_pytree_node_class
+from dataclasses import dataclass, field
 
 
 @register_pytree_node_class
+@dataclass
 class BaseKernel:
     '''Kernel base-class. Defines the needed derivatives of a kernel based 
     on the eval method. In each derived class the eval method must be overwritten.
     '''
-    def __init__(self) -> None:
-        self._df = jacrev(self.eval, argnums=1)
-        self._ddf = jacfwd(self._df, argnums=0)
-
-        self.num_params = None
+    num_params: int = 0
     
-    def eval(self, x1: Array, x2: Array, params: Array) -> float:
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             kernel_parameters
 
         Returns
@@ -38,18 +37,18 @@ class BaseKernel:
         '''
         raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
     
-    def grad2(self, x1: Array, x2: Array, params: Array) -> float:
+    def grad2(self, x1: ndarray, x2: ndarray, params: ndarray) -> float:
         '''covariance between a function evaluation at x1 and a derivative evaluation at x2.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a derivative evaluation.
         index : int
             derivative of the kernel is taken w.r.t. to x2[index]
-        params : Array
+        params : ndarray
             kernel parameters
 
         Returns
@@ -57,22 +56,22 @@ class BaseKernel:
         float
             scalar value that describes the covariance between the points
         '''
-        return self._df(x1, x2, params)
+        return jacrev(self.eval, argnums=1)(x1, x2, params)
     
-    def jac(self, x1: Array, x2: Array, params: Array) -> float:
+    def jac(self, x1: ndarray, x2: ndarray, params: ndarray) -> float:
         '''double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a derivative evaluation
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a derivative evaluation
         index_1 : int
             one partial derivative of the kernel is taken w.r.t. x1[index1]
         index_2 : int
             the other partial derivative of the kernel is taken w.r.t. x2[index2]
-        params : Array
+        params : ndarray
             kernel parameters
 
         Returns
@@ -80,7 +79,7 @@ class BaseKernel:
         float
             scalar value that describes the covariance between the points
         '''
-        return self._ddf(x1, x2, params)
+        return jacfwd(jacrev(self.eval, argnums=1), argnums=0)(x1, x2, params)
 
     def __add__(self, other):
         return SumKernel(self, other)
@@ -102,29 +101,24 @@ class BaseKernel:
 @register_pytree_node_class
 class RBF(BaseKernel):
     '''Kernel based on radial basis function / gaussian
+    Parameters
+    ----------
+    num_params : int, optional
+        by default 2, if changed must be set to n_features + 1, according to the input data.
     '''
-    def __init__(self, num_params = 2):
-        '''
-        Parameters
-        ----------
-        num_params : int, optional
-            by default 2, if changed must be set to n_features + 1, according to the input data.
-        '''
-        super().__init__()
-
-        self.num_params = num_params
+    num_params: int = 2
     
-    def eval(self, x1, x2, params):
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the RBF kernel.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             shape (num_params, ). kernel parameters, the first is a multiplicative constant, 
                                 the rest a scale parameter of the inputs
 
@@ -139,29 +133,24 @@ class RBF(BaseKernel):
 @register_pytree_node_class    
 class Linear(BaseKernel):
     '''kernel based on the dot-product of the two input vectors
+    Parameters
+    ----------
+    num_params : int, optional
+        by default 2, if changed must be set to n_features + 1, according to the input data.
     '''
-    def __init__(self, num_params=2):
-        '''
-        Parameters
-        ----------
-        num_params : int, optional
-            by default 2, if changed must be set to n_features + 1, according to the input data.
-        '''
-        super().__init__()
+    num_params: int = 2
 
-        self.num_params = num_params
-
-    def eval_func(self, x1, x2, params=(0.0, 1.0)):
+    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the Linear (dot-product) kernel.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             shape (num_params, ). kernel parameters, the first is an additive constant, 
                                 the rest a scale parameter of the inputs
 
@@ -175,29 +164,24 @@ class Linear(BaseKernel):
 @register_pytree_node_class
 class Periodic(BaseKernel):
     '''Kernel based on radial basis function / gaussian
+    Parameters
+    ----------
+    num_params : int, optional
+        by default 2, if changed must be set to n_features + 1, according to the input data.
     '''
-    def __init__(self, num_params = 3):
-        '''
-        Parameters
-        ----------
-        num_params : int, optional
-            by default 2, if changed must be set to n_features + 1, according to the input data.
-        '''
-        super().__init__()
-
-        self.num_params = num_params
+    num_params: int = 2
     
-    def eval(self, x1, x2, params):
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the RBF kernel.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             shape (num_params, ). kernel parameters, the first is a multiplicative constant, 
                                 the rest a scale parameter of the inputs
 
@@ -213,24 +197,24 @@ class Periodic(BaseKernel):
 class SumKernel(BaseKernel):
     '''A wrapper that supplies the summing of two kernels
     '''
-    def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
-        super().__init__()
-        self.kernel_1 = kernel_1
-        self.kernel_2 = kernel_2
+    left_kernel: BaseKernel
+    right_kernel: BaseKernel
+    num_params: int = field(init=False)
 
-        self.num_params = kernel_1.num_params + kernel_2.num_params
+    def __post_init__(self) -> None:
+        self.num_params = self.left_kernel.num_params + self.right_kernel.num_params
 
-    def eval_func(self, x1, x2, params):
+    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the sum of two kernels.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             shape (num_params, ). kernel parameters, parameters are split 
             according to the nmber of parameters each of the summed kernels has.
 
@@ -239,12 +223,12 @@ class SumKernel(BaseKernel):
         float
             Scalar value that describes the covariance between the points.
         '''
-        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) + self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
+        return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) + self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
         '''necessary for this class to be an argument in a jitted function (jax)
         '''
-        return ((self.kernel_1, self.kernel_2), None)
+        return ((self.left_kernel, self.right_kernel), None)
     
     @classmethod
     def tree_unflatten(cls, aux_data, children):
@@ -256,24 +240,24 @@ class SumKernel(BaseKernel):
 class ProductKernel(BaseKernel):
     '''a wrapper that supplies multiplying two kernels
     '''
-    def __init__(self, kernel_1 = BaseKernel(), kernel_2 = BaseKernel()) -> None:
-        super().__init__()
-        self.kernel_1 = kernel_1
-        self.kernel_2 = kernel_2
+    left_kernel: BaseKernel
+    right_kernel: BaseKernel
+    num_params: int = field(init=False)
 
-        self.num_params = kernel_1.num_params + kernel_2.num_params
+    def __post_init__(self) -> None:
+        self.num_params = self.left_kernel.num_params + self.right_kernel.num_params
 
-    def eval_func(self, x1, x2, params):
+    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the product of two kernels.
 
         Parameters
         ----------
-        x1 : Array
+        x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        x2 : Array
+        x2 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
-        params : Array
+        params : ndarray
             shape (num_params, ). kernel parameters, parameters are split 
             according to the nmber of parameters each of the summed kernels has.
 
@@ -282,12 +266,12 @@ class ProductKernel(BaseKernel):
         float
             Scalar value that describes the covariance between the points.
         '''
-        return self.kernel_1.eval(x1, x2, params[:self.kernel_1.num_params]) * self.kernel_2.eval(x1, x2, params[self.kernel_1.num_params:])
+        return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) * self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
         '''necessary for this class to be an argument in a jitted function (jax)
         '''
-        return ((self.kernel_1, self.kernel_2), None)
+        return ((self.left_kernel, self.right_kernel), None)
     
     @classmethod
     def tree_unflatten(cls, aux_data, children):
