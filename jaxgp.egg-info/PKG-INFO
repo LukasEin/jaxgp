@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: jaxgp
+Version: 0.0.1
+Summary: Gaussian Process Regression framework to recover functions from their gradient observations
+Home-page: https://github.com/LukasEin/jaxgp.git
+Author: Lukas Einramhof
+Author-email: lukas.einramhof@gmail.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Provides-Extra: testing

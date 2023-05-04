@@ -16,10 +16,10 @@ class BaseKernel:
     ----------
     num_params : int, optional
     '''
-    num_params: int = 0
+    num_params: int = 2
     
     def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
-        '''covariance between two function evaluations at x1 and x2.
+        '''Kernel evaluation at points x1 and x2.
 
         Parameters
         ----------
@@ -32,8 +32,9 @@ class BaseKernel:
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
 
         Raises
         ------
@@ -42,48 +43,51 @@ class BaseKernel:
         '''
         raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
     
-    def grad2(self, x1: ndarray, x2: ndarray, params: ndarray) -> float:
-        '''covariance between a function evaluation at x1 and a derivative evaluation at x2.
+    def grad2(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
+        '''gradient of the kernel w.r.t. x2
 
         Parameters
         ----------
         x1 : ndarray
             shape (n_features, ). Corresponds to a function evaluation.
         x2 : ndarray
-            shape (n_features, ). Corresponds to a derivative evaluation.
-        index : int
-            derivative of the kernel is taken w.r.t. to x2[index]
+            shape (n_features, ). Corresponds to a gradient evaluation.
         params : ndarray
             kernel parameters
 
         Returns
         -------
-        float
-            scalar value that describes the covariance between the points
+        ndarray
+            shae (n_features,)
+            vector value that describes the gradient of the kernel at points x1 and x2
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+
         return jacrev(self.eval, argnums=1)(x1, x2, params)
     
-    def jac(self, x1: ndarray, x2: ndarray, params: ndarray) -> float:
-        '''double derivative of the Kernel w.r.t. x1[index_1] and x2[index_2]
+    def jac(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
+        '''double gradient of the Kernel w.r.t. x1 and x2
 
         Parameters
         ----------
         x1 : ndarray
-            shape (n_features, ). Corresponds to a derivative evaluation
+            shape (n_features, ). Corresponds to a gradient evaluation
         x2 : ndarray
-            shape (n_features, ). Corresponds to a derivative evaluation
-        index_1 : int
-            one partial derivative of the kernel is taken w.r.t. x1[index1]
-        index_2 : int
-            the other partial derivative of the kernel is taken w.r.t. x2[index2]
+            shape (n_features, ). Corresponds to a gradient evaluation
         params : ndarray
             kernel parameters
 
         Returns
         -------
-        float
-            scalar value that describes the covariance between the points
+        ndarray
+            shape (n_features, n_features).
+            matrix value that describes the "hessian" of the kernel at points x1 and x2
+            (only the true hessian if x1 == x2)
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+
         return jacfwd(jacrev(self.eval, argnums=1), argnums=0)(x1, x2, params)
 
     def __add__(self, other):
@@ -104,6 +108,7 @@ class BaseKernel:
         return cls(*children)
 
 @register_pytree_node_class
+@dataclass
 class RBF(BaseKernel):
     '''Kernel based on radial basis function / gaussian
 
@@ -130,13 +135,18 @@ class RBF(BaseKernel):
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+
         diff = (x1 - x2) / params[1:]
         return params[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
 
-@register_pytree_node_class    
+@register_pytree_node_class  
+@dataclass  
 class Linear(BaseKernel):
     '''kernel based on the dot-product of the two input vectors
 
@@ -147,7 +157,7 @@ class Linear(BaseKernel):
     '''
     num_params: int = 2
 
-    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the Linear (dot-product) kernel.
 
@@ -163,12 +173,17 @@ class Linear(BaseKernel):
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+
         return jnp.inner(x1 * params[1:], x2) + params[0]
     
 @register_pytree_node_class
+@dataclass  
 class Periodic(BaseKernel):
     '''Kernel based on radial basis function / gaussian
     
@@ -195,13 +210,18 @@ class Periodic(BaseKernel):
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+
         periodic = jnp.sin(jnp.pi*(x1-x2)/params[1])**2
         return params[0]*jnp.exp(-(2 / params[2]**2) * jnp.sum(periodic))
 
 @register_pytree_node_class
+@dataclass  
 class SumKernel(BaseKernel):
     '''A wrapper that supplies the summing of two kernels
     '''
@@ -212,7 +232,7 @@ class SumKernel(BaseKernel):
     def __post_init__(self) -> None:
         self.num_params = self.left_kernel.num_params + self.right_kernel.num_params
 
-    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the sum of two kernels.
 
@@ -228,9 +248,12 @@ class SumKernel(BaseKernel):
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
+        assert params.shape == (self.num_params), f"Parameters must be 1-dimensional and either of shape (2,) or (n_features + 1,), got: {params.shape}!"
+
         return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) + self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
@@ -245,6 +268,7 @@ class SumKernel(BaseKernel):
         return cls(*children)
 
 @register_pytree_node_class
+@dataclass  
 class ProductKernel(BaseKernel):
     '''a wrapper that supplies multiplying two kernels
     '''
@@ -255,7 +279,7 @@ class ProductKernel(BaseKernel):
     def __post_init__(self) -> None:
         self.num_params = self.left_kernel.num_params + self.right_kernel.num_params
 
-    def eval_func(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
+    def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
         according to the product of two kernels.
 
@@ -271,9 +295,11 @@ class ProductKernel(BaseKernel):
 
         Returns
         -------
-        float
-            Scalar value that describes the covariance between the points.
+        ndarray
+            shape ()
+            Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
+        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input arrays must all be 1-dimensional, got: {x1.shape}, {x2.shape}, {params.shape}!"
         return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) * self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
