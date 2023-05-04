@@ -1,13 +1,14 @@
 from typing import Union
 
 import jax.numpy as jnp
-from jax.numpy import ndarray
 from jax import jit, vmap
+from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 
 from .covar import full_covariance_matrix
 from .kernels import BaseKernel
 from .utils import _CovMatrix_Grad, _CovMatrix_Kernel
+
 
 @jit 
 def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:

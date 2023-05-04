@@ -1,7 +1,8 @@
-import jax.numpy as jnp
 import time
-
 from typing import Tuple
+
+import jax.numpy as jnp
+
 
 class Logger:
     '''A simple logger to write out the convergence process of the optimization

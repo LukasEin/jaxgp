@@ -1,13 +1,13 @@
 from typing import Tuple, Union
 
 import jax.numpy as jnp
-from jax.numpy import ndarray
 from jax import jit, vmap
+from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 
+from .kernels import BaseKernel
 from .utils import (_build_xT_Ainv_x, _CovMatrix_Grad, _CovMatrix_Kernel,
                     _CovVector_Id)
-from .kernels import BaseKernel
 
 
 @jit

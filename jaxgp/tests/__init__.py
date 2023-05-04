@@ -1,2 +1,1 @@
-from . import optimizertesting
-from . import testfunctions
+from . import optimizertesting, testfunctions

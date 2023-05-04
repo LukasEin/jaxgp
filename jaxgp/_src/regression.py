@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Tuple, Union
 
 import jax.numpy as jnp
@@ -8,7 +9,6 @@ from . import covar, likelyhood, predict
 from .kernels import BaseKernel
 from .logger import Logger
 
-from dataclasses import dataclass
 
 @dataclass
 class ExactGPR:

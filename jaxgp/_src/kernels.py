@@ -1,8 +1,9 @@
+from dataclasses import dataclass, field
+
 import jax.numpy as jnp
 from jax import jacfwd, jacrev
 from jax.numpy import ndarray
 from jax.tree_util import register_pytree_node_class
-from dataclasses import dataclass, field
 
 
 @register_pytree_node_class

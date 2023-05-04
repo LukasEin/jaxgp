@@ -1,2 +1,1 @@
-from ._src.regression import SparseGPR
-from ._src.regression import ExactGPR
+from ._src.regression import ExactGPR, SparseGPR
