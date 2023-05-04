@@ -75,7 +75,7 @@ def sparse_covariance_matrix(X_split: Tuple[Array, Array], Y_data: Array, X_ref:
     KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, params)
     KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, params))
     
-    K_MN = jnp.vstack((KF,KD.T))
+    K_MN = jnp.hstack((KF,KD))
 
     # calculates the covariance between each pair of reference points
     K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, params)

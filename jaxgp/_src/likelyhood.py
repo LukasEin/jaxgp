@@ -78,7 +78,7 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: Array, X_split: list[Array
     KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, kernel_params)
     KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, kernel_params))
     
-    K_MN = jnp.vstack((KF,KD.T))
+    K_MN = jnp.hstack((KF,KD))
 
     # calculates the covariance between the reference points
     K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, kernel_params)
