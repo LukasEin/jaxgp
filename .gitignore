@@ -4,5 +4,5 @@ __pycache__/
 *.png
 *.log
 *.txt
-*.egg-info
+jaxgp.egg-info/
 .pytest_cache/
