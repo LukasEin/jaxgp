@@ -24,13 +24,13 @@ class TestBase:
             self.kernel.jac(self.X, self.X, self.params)
 
 class TestRBF:
+    num_params = 2
+    params = jnp.ones(num_params)
     kernel = RBF()
-    params = jnp.ones(2)
     X = jnp.zeros((5,))    
 
     def test_params(self):
-        print(self.kernel)
-        assert self.kernel.num_params == 2
+        assert self.kernel.num_params == self.num_params
 
     def test_pointshape(self):
         XF = jnp.zeros((5,1))  
@@ -42,7 +42,7 @@ class TestRBF:
         with pytest.raises(AssertionError): self.kernel.eval(XF, XF, self.params)
 
     def test_paramshape(self):
-        params2 = jnp.ones((2,2)) 
+        params2 = jnp.ones((self.num_params,1)) 
 
         with pytest.raises(AssertionError): self.kernel.eval(self.X, self.X, params2)
 
@@ -56,3 +56,17 @@ class TestLinear(TestRBF):
 
 class TestPeriodic(TestRBF):
     kernel = Periodic()
+
+class TestSum(TestRBF):
+    num_params = 4
+    params = jnp.ones(num_params)
+    left_kernel = RBF(2)
+    right_kernel = Linear(2)
+    kernel = SumKernel(left_kernel, right_kernel)
+   
+class TestProduct(TestRBF):
+    num_params = 4
+    params = jnp.ones(num_params)
+    left_kernel = RBF(2)
+    right_kernel = Linear(2)
+    kernel = ProductKernel(left_kernel, right_kernel)

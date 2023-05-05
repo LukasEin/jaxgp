@@ -1,1 +1,2 @@
-from ._src.kernels import RBF, BaseKernel, Linear, Periodic
+from ._src.kernels import (RBF, BaseKernel, Linear, Periodic, ProductKernel,
+                           SumKernel)

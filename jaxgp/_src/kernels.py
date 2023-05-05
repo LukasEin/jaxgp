@@ -61,9 +61,6 @@ class BaseKernel:
             shae (n_features,)
             vector value that describes the gradient of the kernel at points x1 and x2
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
-
         return jacrev(self.eval, argnums=1)(x1, x2, params)
     
     def jac(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
@@ -85,9 +82,6 @@ class BaseKernel:
             matrix value that describes the "hessian" of the kernel at points x1 and x2
             (only the true hessian if x1 == x2)
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
-
         return jacfwd(jacrev(self.eval, argnums=1), argnums=0)(x1, x2, params)
 
     def __add__(self, other):
@@ -139,8 +133,9 @@ class RBF(BaseKernel):
             shape ()
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+        assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
 
         diff = (x1 - x2) / params[1:]
         return params[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
@@ -177,8 +172,9 @@ class Linear(BaseKernel):
             shape ()
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+        assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
 
         return jnp.inner(x1 * params[1:], x2) + params[0]
     
@@ -214,8 +210,9 @@ class Periodic(BaseKernel):
             shape ()
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert params.shape == (self.num_params,), f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+        assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
+        assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
 
         periodic = jnp.sin(jnp.pi*(x1-x2)/params[1])**2
         return params[0]*jnp.exp(-(2 / params[2]**2) * jnp.sum(periodic))
@@ -252,8 +249,6 @@ class SumKernel(BaseKernel):
             shape ()
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
-        assert params.shape == (self.num_params), f"Parameters must be 1-dimensional and either of shape (2,) or (n_features + 1,), got: {params.shape}!"
-
         return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) + self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
@@ -299,7 +294,6 @@ class ProductKernel(BaseKernel):
             shape ()
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
-        assert len(x1.shape) == 1 and len(x2.shape) == 1 and len(params.shape) == 1, f"Input arrays must all be 1-dimensional, got: {x1.shape}, {x2.shape}, {params.shape}!"
         return self.left_kernel.eval(x1, x2, params[:self.left_kernel.num_params]) * self.right_kernel.eval(x1, x2, params[self.left_kernel.num_params:])
     
     def tree_flatten(self):
