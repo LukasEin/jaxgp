@@ -55,6 +55,8 @@ class TestLinear(TestRBF):
     kernel = Linear()
 
 class TestPeriodic(TestRBF):
+    num_params = 3
+    params = jnp.ones(num_params)
     kernel = Periodic()
 
 class TestSum(TestRBF):

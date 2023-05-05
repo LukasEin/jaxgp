@@ -135,7 +135,7 @@ class RBF(BaseKernel):
         '''
         assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
         assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
-            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},) got: {params.shape}!"
 
         diff = (x1 - x2) / params[1:]
         return params[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
@@ -174,7 +174,7 @@ class Linear(BaseKernel):
         '''
         assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
         assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
-            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},) got: {params.shape}!"
 
         return jnp.inner(x1 * params[1:], x2) + params[0]
     
@@ -188,7 +188,7 @@ class Periodic(BaseKernel):
     num_params : int, optional
         by default 2, if changed must be set to n_features + 1, according to the input data.
     '''
-    num_params: int = 2
+    num_params: int = 3
     
     def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
@@ -211,11 +211,11 @@ class Periodic(BaseKernel):
             Scalar value that describes the kernel evaluation at points x1 and x2.
         '''
         assert len(x1.shape) == 1 and len(x2.shape) == 1, f"Input points must all be 1-dimensional, got: {x1.shape}, {x2.shape}!"
-        assert len(params.shape) == 1 and (len(params) == 2 or len(params) == len(x1) + 1) , \
-            f"Parameters must be 1-dimensional and of shape ({self.num_params},), got: {params.shape}!"
+        assert len(params.shape) == 1 and (len(params) == 3 or len(params) == len(x1) + 2) , \
+            f"Parameters must be 1-dimensional and of shape ({self.num_params},) got: {params.shape}!"
 
-        periodic = jnp.sin(jnp.pi*(x1-x2)/params[1])**2
-        return params[0]*jnp.exp(-(2 / params[2]**2) * jnp.sum(periodic))
+        periodic = jnp.sin(jnp.pi*(x1-x2)/params[2:])**2
+        return params[0]*jnp.exp(-(2 / params[1]**2) * jnp.sum(periodic))
 
 @register_pytree_node_class
 @dataclass  
