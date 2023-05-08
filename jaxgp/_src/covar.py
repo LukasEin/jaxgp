@@ -5,7 +5,7 @@ from jax import jit, vmap
 from jax.numpy import ndarray
 
 from .kernels import BaseKernel
-from .utils import _CovMatrix_Grad, _CovMatrix_Hess, _CovMatrix_Kernel
+from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF
 
 
 @jit
@@ -32,9 +32,9 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     '''
     # Build the full covariance Matrix between all datapoints in X_data depending on if they   
     # represent function evaluations or derivative evaluations
-    KF = _CovMatrix_Kernel(X_split[0], X_split[0], kernel, params)
-    KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_split[0], X_split[1], kernel, params))
-    KDD = jnp.hstack(jnp.hstack((*_CovMatrix_Hess(X_split[1], X_split[1], kernel, params),)))
+    KF = CovMatrixFF(X_split[0], X_split[0], kernel, params)
+    KD = CovMatrixFD(X_split[0], X_split[1], kernel, params)
+    KDD = CovMatrixDD(X_split[1], X_split[1], kernel, params)
 
     K_NN = jnp.vstack((jnp.hstack((KF,KD)), 
                        jnp.hstack((KD.T,KDD))))
@@ -71,13 +71,13 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
         sparse (PPA) covariance matrix, projected input labels
     '''
     # calculates the covariance between the training points and the reference points
-    KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, params)
-    KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, params))
+    KF = CovMatrixFF(X_ref, X_split[0], kernel, params)
+    KD = CovMatrixFD(X_ref, X_split[1], kernel, params)
     
     K_MN = jnp.hstack((KF,KD))
 
     # calculates the covariance between each pair of reference points
-    K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, params)
+    K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
         
     # added small positive diagonal to make the matrix positive definite
     sparse_covmatrix = noise**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-4

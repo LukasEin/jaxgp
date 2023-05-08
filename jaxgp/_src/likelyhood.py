@@ -7,7 +7,7 @@ from jax.scipy.linalg import solve
 
 from .covar import full_covariance_matrix
 from .kernels import BaseKernel
-from .utils import _CovMatrix_Grad, _CovMatrix_Kernel
+from .utils import CovMatrixFD, CovMatrixFF
 
 
 @jit 
@@ -77,13 +77,13 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
         Negative Log Likelyhood estimate for PPA
     '''
     # calculates the covariance between the data and the reference points
-    KF = _CovMatrix_Kernel(X_ref, X_split[0], kernel, kernel_params)
-    KD = vmap(jnp.ravel, in_axes=0)(_CovMatrix_Grad(X_ref, X_split[1], kernel, kernel_params))
+    KF = CovMatrixFF(X_ref, X_split[0], kernel, kernel_params)
+    KD = vmap(jnp.ravel, in_axes=0)(CovMatrixFD(X_ref, X_split[1], kernel, kernel_params))
     
     K_MN = jnp.hstack((KF,KD))
 
     # calculates the covariance between the reference points
-    K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, kernel_params)
+    K_ref = CovMatrixFF(X_ref, X_ref, kernel, kernel_params)
 
     # directly calculates the logdet of the Nystrom covariance matrix
     log_matrix = jnp.eye(len(Y_data)) * (1e-6 + noise**2) + K_MN.T@solve(K_ref,K_MN)

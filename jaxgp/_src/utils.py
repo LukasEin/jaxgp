@@ -1,7 +1,7 @@
 from functools import partial
 
 from jax import jit, vmap
-from jax.numpy import ndarray
+from jax.numpy import ndarray, ravel, hstack
 from jax.scipy.linalg import solve
 
 from .kernels import BaseKernel
@@ -49,7 +49,7 @@ def _CovVector_Id(X: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     return func(X)
 
 @jit
-def _CovMatrix_Kernel(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
+def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on inputs representing values of the target function.
 
@@ -74,10 +74,10 @@ def _CovMatrix_Kernel(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndar
     return func(X1, X2)
 
 @jit
-def _CovMatrix_Grad(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
+def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 representing values of the target function and X2
-    representing derivative values of the target function.
+    representing gradient values of the target function.
 
     Parameters
     ----------
@@ -89,20 +89,18 @@ def _CovMatrix_Grad(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarra
         Kernel that describes the covariance between input points.
     params : ndarray
         kernel parameters
-    index : int
-        derivative of the kernel is calculted w.r.t. to X2[index]
 
     Returns
     -------
     ndarray
-        shape (N1, N2), [dK(x1, x2) / dx2[index2] for (x1, x2) in (X1, X2)]
+        shape (N1, N2 * n_features), [dK(x1, x2) / dx2 for (x1, x2) in (X1, X2)]
     '''
     func = lambda v1, v2: kernel.grad2(v1, v2, params) 
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
-    return func(X1, X2)
+    return vmap(ravel, in_axes=0)(func(X1, X2))
 
 @jit
-def _CovMatrix_Hess(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
+def CovMatrixDD(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 and X2 representing derivative values of the target function.
 
@@ -116,16 +114,12 @@ def _CovMatrix_Hess(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarra
         Kernel that describes the covariance between input points.
     params : ndarray
         kernel parameters
-    index_1 : int
-        one partial derivative of the kernel is taken w.r.t. X1[i,index1] 
-    index_2 : int
-        the other partial derivative of the kernel is taken w.r.t. X2[i,index2]
 
     Returns
     -------
     ndarray
-        shape (N1, N2), [dK(x1, x2) / (dx1[index1]*dx2[index2]) for (x1, x2) in (X1, X2)]
+        shape (N1 * n_features, N2 * n_features), [dK(x1, x2) / (dx1*dx2) for (x1, x2) in (X1, X2)]
     '''
     func = lambda v1, v2: kernel.jac(v1, v2, params)
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
-    return func(X1, X2)
+    return hstack(hstack((*func(X1, X2),)))

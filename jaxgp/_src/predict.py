@@ -6,8 +6,7 @@ from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 
 from .kernels import BaseKernel
-from .utils import (_build_xT_Ainv_x, _CovMatrix_Grad, _CovMatrix_Kernel,
-                    _CovVector_Id)
+from .utils import _build_xT_Ainv_x, CovMatrixFD, CovMatrixFF, _CovVector_Id
 
 
 @jit
@@ -39,8 +38,8 @@ def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: 
     Tuple[ndarray, ndarray]
         Posterior means and stds, [mean(x), std(x) for x in X]
     '''
-    function_vectors = _CovMatrix_Kernel(X, X_split[0], kernel, params)
-    derivative_vectors = vmap(jnp.ravel,in_axes=0)(_CovMatrix_Grad(X, X_split[1], kernel, params))
+    function_vectors = CovMatrixFF(X, X_split[0], kernel, params)
+    derivative_vectors = CovMatrixFD(X, X_split[1], kernel, params)
     full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
     means = full_vectors@solve(full_covmatrix,Y_data,assume_a="pos")
@@ -82,13 +81,13 @@ def sparse_predict(X: ndarray, sparse_covmatrix: ndarray, projected_labels: ndar
     Tuple[ndarray, ndarray]
         Posterior means and stds, [mean(x), std(x) for x in X]
     '''
-    ref_vectors = _CovMatrix_Kernel(X, X_ref, kernel, params)
+    ref_vectors = CovMatrixFF(X, X_ref, kernel, params)
 
     means = ref_vectors@solve(sparse_covmatrix,projected_labels)#,assume_a="pos")
 
     X_cov = _CovVector_Id(X, kernel, params)
 
-    K_ref = _CovMatrix_Kernel(X_ref, X_ref, kernel, params)
+    K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
 
     first_temp = _build_xT_Ainv_x(K_ref + jnp.eye(len(X_ref)) * 1e-4, ref_vectors)
     second_temp = noise**2 * _build_xT_Ainv_x(sparse_covmatrix, ref_vectors)
