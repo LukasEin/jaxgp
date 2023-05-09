@@ -14,14 +14,22 @@ The key difference to other GPR frameworks is the flexibility in choosing differ
 
 Download the package from github via
 
-```
+```shell
 git clone https://github.com/LukasEin/jaxgp.git
 ```
 
-and then install the package via
+Then, to install the package directly, run
 
+```shell
+python3 setup.py install --user
 ```
-python3 setup.py install
+
+or to install it in a conda environment run
+
+```shell
+conda create -n myenv python=3.8
+conda activate myenv
+python3 setup.py install --user
 ```
 
 ## Example usage
