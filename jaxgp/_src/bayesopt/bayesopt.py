@@ -47,13 +47,11 @@ def _bayesoptstep(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarr
 
     X_next, Y_next, isgrad = acquisition_func(cov_matrix, jnp.hstack(Y_data), X_split, kernel, result.params, *args)
 
-    print(X_next, Y_next)
-
     if isgrad:
-        X_next = (X_split[0], jnp.hstack((X_split[1], X_next)))
+        X_next = (X_split[0], jnp.vstack((X_split[1], X_next)))
         Y_next = (Y_data[0], jnp.hstack((Y_data[1], Y_next)))
     else:
-        X_next = (jnp.hstack((X_split[0], X_next)), X_split[1])
+        X_next = (jnp.vstack((X_split[0], X_next)), X_split[1])
         Y_next = (jnp.hstack((Y_data[0], Y_next)), Y_data[1])
         
     return (X_next, Y_next)
@@ -70,16 +68,16 @@ class BayesOpt:
     optimize_method: str = "L-BFGS-B"
     logger: Callable = None
 
-    def __post_init__(self):
-        self.result = (self.X_split, self.Y_train)
+    # def __post_init__(self):
+    #     self.result = (self.X_split, self.Y_train)
 
     def run(self, num_iters: int) -> None:
-        X, Y = self.result
+        X, Y = self.X_split, self.Y_train
 
         for _ in range(num_iters):
             X, Y = _bayesoptstep(X, Y, self.init_kernel_params, self.kernel, self.noise, self.optimize_method, self.acquisition_func, *self.acqu_extra_args)
 
-
+        self.X_split, self.Y_train = X, Y
         # def for_body(i, input):
         #     return _bayesoptstep(*input, self.init_kernel_params, self.kernel, self.noise, self.optimize_method, self.acquisition_func, *self.acqu_extra_args)
         
