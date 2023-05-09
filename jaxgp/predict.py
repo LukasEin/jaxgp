@@ -1,1 +1,1 @@
-from ._src.predict import full_predict, sparse_predict
+from ._src.predict import full_predict, sparse_predict, full_gradient_predict

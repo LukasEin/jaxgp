@@ -7,7 +7,6 @@ from jax.scipy.linalg import solve
 from .kernels import BaseKernel
 
 
-@jit
 @partial(vmap, in_axes=(None, 0))
 def _build_xT_Ainv_x(A: ndarray, X: ndarray) -> ndarray:
     ''' Calculates X.T @ A_inv @ X for each of the M arrays in X
@@ -26,7 +25,6 @@ def _build_xT_Ainv_x(A: ndarray, X: ndarray) -> ndarray:
     '''
     return X.T@solve(A,X,assume_a="pos")
 
-@jit
 def _CovVector_Id(X: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Calculates the covariance of each point in X with itself
 
@@ -48,7 +46,6 @@ def _CovVector_Id(X: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     func = vmap(func, in_axes=(0))
     return func(X)
 
-@jit
 def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on inputs representing values of the target function.
@@ -73,7 +70,6 @@ def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)
 
-@jit
 def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 representing values of the target function and X2
@@ -99,7 +95,6 @@ def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return vmap(ravel, in_axes=0)(func(X1, X2))
 
-@jit
 def CovMatrixDD(X1: ndarray, X2: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 and X2 representing derivative values of the target function.

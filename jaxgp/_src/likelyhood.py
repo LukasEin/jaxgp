@@ -10,7 +10,6 @@ from .kernels import BaseKernel
 from .utils import CovMatrixFD, CovMatrixFF
 
 
-@jit 
 def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for full GPR. Y_data ~ N(0,[id*s**2 + K_NN]).
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.
@@ -49,7 +48,6 @@ def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarr
     
     return nlle
 
-@jit
 def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
     '''Negative log Likelyhood for sparse GPR (PPA). Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN]) which is the same as for Nystrom approximation.
     kernel_params are the first arguments in order to minimize this function w.r.t. those variables.

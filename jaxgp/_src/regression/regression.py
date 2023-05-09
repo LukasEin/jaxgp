@@ -2,12 +2,13 @@ from dataclasses import dataclass
 from typing import Tuple, Union
 
 import jax.numpy as jnp
+from jax import jit
 from jax.numpy import ndarray
 from jaxopt import ScipyBoundedMinimize
 
-from . import covar, likelyhood, predict
-from .kernels import BaseKernel
-from .logger import Logger
+from .. import covar, likelyhood, predict
+from ..kernels import BaseKernel
+from ..logger import Logger
 
 
 @dataclass
@@ -60,7 +61,7 @@ class ExactGPR:
         if self.logger is not None:
             self.logger.write()
 
-        self.fit_matrix = covar.full_covariance_matrix(self.X_split, self.noise, self.kernel, self.kernel_params)
+        self.fit_matrix = jit(covar.full_covariance_matrix)(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.fit_vector = Y_data
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
@@ -76,7 +77,7 @@ class ExactGPR:
         Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
-        return predict.full_predict(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
+        return jit(predict.full_predict)(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
     
 @dataclass    
 class SparseGPR:
@@ -131,7 +132,7 @@ class SparseGPR:
         self.kernel_params = result.params
         if self.logger is not None:
             self.logger.write()
-        self.fit_matrix, self.fit_vector = covar.sparse_covariance_matrix(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        self.fit_matrix, self.fit_vector = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -146,4 +147,4 @@ class SparseGPR:
         Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
-        return predict.sparse_predict(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        return jit(predict.sparse_predict)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)

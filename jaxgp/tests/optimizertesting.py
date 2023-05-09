@@ -3,7 +3,7 @@ from typing import Callable, Tuple, Union
 import jax.numpy as jnp
 from jax import Array, grad, jit, random, vmap
 
-from .._src.regression import ExactGPR, SparseGPR
+from .._src.regression.regression import ExactGPR, SparseGPR
 from .._src.kernels import BaseKernel
 from .._src.logger import Logger
    

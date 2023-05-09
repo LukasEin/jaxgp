@@ -6,10 +6,10 @@ from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 
 from .kernels import BaseKernel
-from .utils import _build_xT_Ainv_x, CovMatrixFD, CovMatrixFF, _CovVector_Id
+from .utils import (CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x,
+                    _CovVector_Id)
 
 
-@jit
 def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of full_covmatrix and Y_data for the full gpr model
@@ -50,7 +50,6 @@ def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: 
     
     return means, stds
 
-@jit
 def sparse_predict(X: ndarray, sparse_covmatrix: ndarray, projected_labels: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of sparse_covmatrix and projected labels in the sparse (PPA) gpr model
@@ -95,3 +94,45 @@ def sparse_predict(X: ndarray, sparse_covmatrix: ndarray, projected_labels: ndar
     stds = jnp.sqrt(X_cov - first_temp + second_temp) 
     
     return means, stds
+
+def full_gradient_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
+    '''Calculates the posterior mean and std for each point in X given prior information 
+    in the form of full_covmatrix and Y_data for the full gpr model
+
+    Parameters
+    ----------
+    X : ndarray
+        ndarray of shape (n_points, n_features). For each point the posterior mean and std are calculated
+    full_covmatrix : ndarray
+        prior covariance matrix of shape (n_samples, n_samples)
+    Y_data : ndarray
+        ndarray of shape (n_samples,) s.t. n_samples = sum(n_samples_i) in X_split. Corresponding labels to the samples in X_split
+    X_split : ndarray
+        List of ndarrays: [function_evals(n_samples_f, n_features), dx1_evals(n_samples_dx1, n_features), ..., dxn_featrues_evals(n_samples_dxn_features, n_features)]
+    noise : Union[ndarray, float]
+        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
+        Else each value is added to the corresponding diagonal block coming from X_split
+        ndarray is not supported yet!!!
+    kernel : derived class from BaseKernel
+        Kernel that describes the covariance between input points.
+    params : ndarray
+        kernel parameters
+
+    Returns
+    -------
+    Tuple[ndarray, ndarray]
+        Posterior means and stds, [mean(x), std(x) for x in X]
+    '''
+    gradient_vectors = CovMatrixFD(X, X_split[0], kernel, params)
+    doublegrad_vectors = CovMatrixDD(X, X_split[1], kernel, params)
+
+    print(gradient_vectors.shape, doublegrad_vectors.shape)
+    # full_vectors = jnp.hstack((function_vectors, derivative_vectors))
+
+    # means = full_vectors@solve(full_covmatrix,Y_data,assume_a="pos")
+
+    # X_cov = _CovVector_Id(X, kernel, params)  
+    # temp = _build_xT_Ainv_x(full_covmatrix, full_vectors)      
+    # stds = jnp.sqrt(X_cov - temp)
+    
+    # return means, stds

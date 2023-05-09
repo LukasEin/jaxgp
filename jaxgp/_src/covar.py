@@ -8,7 +8,6 @@ from .kernels import BaseKernel
 from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF
 
 
-@jit
 def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Calculates the full covariance matrix over the input samples in X_split.
 
@@ -43,7 +42,6 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     # numerical stability of the inversion and determinant
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
-@jit
 def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
     and the projected input labels in Y_data according to the Projected Process Approximation.
