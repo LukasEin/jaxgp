@@ -1,7 +1,5 @@
 __pycache__/
 *.pyc
-*.pdf
-*.png
 *.log
 *.txt
 .pytest_cache/

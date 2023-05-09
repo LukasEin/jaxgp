@@ -152,7 +152,7 @@ for i,x in enumerate(x_der):
 plt.grid()
 plt.legend()
 ```    
-![png](1d_integration_example_files/1d_integration_example_20_1.png)
+![png](plots/1d_integration_example_20_1.png)
 
 Plotting the predicted function together with its confidence interval we can see that even with only a few datapoints the prediction works good. The shaded region describes the $1\sigma$ confidence interval around the prediction.
 
