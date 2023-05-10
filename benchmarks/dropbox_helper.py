@@ -4,7 +4,8 @@ import io
 
 import jax.numpy as jnp
 
-DROPBOX_ACCESS_TOKEN = "sl.BeGdRYpTpczw4yHf0zZLnmoIwk5pzbJ1WcJF3IznblssjBH_BNjT6LAZNPJ3M1rqEdO5BXdJqXhgHVlPXypPJ7iyOHx532-TWW5d5YTIfKNLqMLmcb4El102edVujMXHLiZG5vWmO3_C"
+with open("../dropboxtoken.txt") as f:
+    DROPBOX_ACCESS_TOKEN = f.read()
 
 def connect():
     try:
