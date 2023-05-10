@@ -10,7 +10,7 @@ setuptools.setup(
     url="https://github.com/LukasEin/jaxgp.git",
     packages=setuptools.find_packages(),
     install_requires=[
-        'jax', 'jaxopt', 'matplotlib', 'jupyter'
+        'jax', 'jaxopt', 'matplotlib', 'jupyter', "dropbox"
     ],
     extras_require={'testing': ['pytest>=5.0']},
     python_requires='>=3.7',
