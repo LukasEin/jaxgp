@@ -74,8 +74,8 @@ class BayesOpt:
     def run(self, num_iters: int) -> None:
         X, Y = self.X_split, self.Y_train
 
-        for _ in range(num_iters):
-            X, Y = _bayesoptstep(X, Y, self.init_kernel_params, self.kernel, self.noise, self.optimize_method, self.acquisition_func, *self.acqu_extra_args)
+        for i in range(num_iters):
+            X, Y = _bayesoptstep(X, Y, self.init_kernel_params, self.kernel, self.noise, self.optimize_method, self.acquisition_func, i, *self.acqu_extra_args)
 
         self.X_split, self.Y_train = X, Y
         # def for_body(i, input):
