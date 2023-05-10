@@ -8,7 +8,7 @@ setuptools.setup(
     description=
     "Gaussian Process Regression framework to recover functions from their gradient observations",
     url="https://github.com/LukasEin/jaxgp.git",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages("./jaxgp"),
     install_requires=[
         'jax', 'jaxopt'
     ],
