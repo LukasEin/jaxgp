@@ -26,8 +26,7 @@ def db_to_jnp(dbx: dropbox.Dropbox, path):
     with io.BytesIO(result.content) as stream:
         data = jnp.load(stream) 
 
-        out = {}
+        out = []
         for key, value in data.items():
-            out[key] = value
-
+            out.append(value)
         return out
