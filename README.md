@@ -34,7 +34,7 @@ python3 setup.py install
 
 ## Example usage
 
-This is a quick example on how to use the present gaussian process regression framework to formally integrate gradient observations of a function. *(For more comprehensive examples see `1d_example_regression.ipynb` and `2d_example_regression.ipynb`. To run the notebooks, the jaxgp module has to be installed first.)*
+This is a quick example on how to use the present gaussian process regression framework to formally integrate gradient observations of a function. *(For more comprehensive examples see `1d_example_regression.ipynb` and `2d_example_regression.ipynb` in the `examples/` folder. To run the notebooks, the jaxgp module has to be installed first.)*
 
 This example will show how to predict a 1D function using gradient information with a full GPR model. 
 
