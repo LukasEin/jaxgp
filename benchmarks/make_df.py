@@ -29,11 +29,15 @@ def make_dict(num_f_vals, num_d_vals, optimizer, fun, eval_grid, predictions, st
             "maxstds": vmap(maxstd, in_axes=(0,))(stds),
             "true_in_confs": jnp.array(true_in_confs)}
     
-    a = {"mean_mse": jnp.mean(temp["mses"]), 
+    mses = {"mean_mse": jnp.mean(temp["mses"]), 
          "max_mse": jnp.max(temp["mses"]),
          "min_mse": jnp.min(temp["mses"])}
     
-    return {**temp, **a}
+    confs = {"mean_tic": jnp.mean(temp["true_in_confs"]), 
+         "max_tic": jnp.max(temp["true_in_confs"]),
+         "min_tic": jnp.min(temp["true_in_confs"])}
+    
+    return {**temp, **mses, **confs}
 
 def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_size, fun, eval_grid):
     in_list = []
