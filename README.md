@@ -32,6 +32,8 @@ conda activate myenv
 python3 setup.py install
 ```
 
+direcly in the newly created `jaxgp/` folder.
+
 ## Example usage
 
 This is a quick example on how to use the present gaussian process regression framework to formally integrate gradient observations of a function. *(For more comprehensive examples see `1d_example_regression.ipynb` and `2d_example_regression.ipynb` in the `examples/` folder. To run the notebooks, the jaxgp module has to be installed first.)*
