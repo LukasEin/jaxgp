@@ -46,11 +46,14 @@ def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_s
         for num_d_vals in list_d_vals:        
             for optimizer in optimizers:
                 fname = f"{in_dir}/{name}_d{num_d_vals}_f{num_f_vals}_{optimizer}"
+                # fname = f"{in_dir}/{name}_f{num_f_vals}d{num_d_vals}"
                 if sparse:
                     fname = f"{fname}_sparse{subset_size}"
 
                 means = jnp.load(f"{fname}_means.npz")
                 stds = jnp.load(f"{fname}_stds.npz")
+                # means = jnp.load(f"{fname}means{optimizer}.npz")
+                # stds = jnp.load(f"{fname}stds{optimizer}.npz")
                 
                 means_list = []
                 for key, value in means.items():
