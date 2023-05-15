@@ -6,7 +6,7 @@ from jax.numpy import ndarray
 from jaxopt import ScipyBoundedMinimize
 
 from ..kernels import BaseKernel
-from ..predict import full_predict
+from ..predict import full_predict_nograd
 
 # def upper_confidence_bound(cov_matrix, Y_data, X_split, kernel, params, grid, eval_function):
         
@@ -36,7 +36,7 @@ from ..predict import full_predict
 
 #     return X_next, Y_next.reshape(-1), isgrad
 
-def upper_confidence_bound(cov_matrix: ndarray, Y_data: ndarray, X_split: Tuple[ndarray, ndarray], kernel: BaseKernel, kernel_params: ndarray, 
+def upper_confidence_bound(cov_matrix: ndarray, Y_data: Tuple[ndarray, ndarray], X_split: Tuple[ndarray, ndarray], kernel: BaseKernel, kernel_params: ndarray, 
                            index: int, rand: int, bounds: ndarray, eval_function: Callable, explorparam: float, grid: ndarray) -> Tuple[Tuple[ndarray, ndarray], ndarray, bool]:
     '''_summary_
 
@@ -70,15 +70,23 @@ def upper_confidence_bound(cov_matrix: ndarray, Y_data: ndarray, X_split: Tuple[
     Tuple[Tuple[ndarray, ndarray], ndarray, bool]
         _description_
     '''
-    if index%rand == 0:
+    # if index%rand == 0:
+    if False:
         key = random.PRNGKey(index*rand)
         X_next = random.uniform(key, shape=bounds[0].shape, minval=bounds[0], maxval=bounds[1]).reshape(1,-1)
         Y_next, isgrad = eval_function(X_next)
     else:
-        mean, std = jit(full_predict)(grid.reshape(-1,1), cov_matrix, Y_data, X_split, kernel, kernel_params)
+        mean, std = jit(full_predict_nograd)(grid.reshape(-1,1), cov_matrix, Y_data[1], X_split[1], kernel, kernel_params)
 
-        next_arg = jnp.argmax((mean + explorparam*std).reshape(-1))
+        # next_arg = jnp.argmax((mean + explorparam*std).reshape(-1))
+        next_arg = jnp.argmax((std).reshape(-1))
         X_next = grid[next_arg].reshape(1,-1)
         Y_next, isgrad = eval_function(X_next)
+
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(1,1)
+        # ax.plot(grid, mean + explorparam*std)
+        ax.plot(grid, std)
+        plt.axvline(X_next,color="r")
 
     return X_next, Y_next.reshape(-1), isgrad

@@ -6,9 +6,9 @@ import jax.numpy as jnp
 from jax.numpy import ndarray
 from jaxopt import ScipyBoundedMinimize
 
-from ..covar import full_covariance_matrix
+from ..covar import full_covariance_matrix, full_covariance_matrix_nograd
 from ..kernels import BaseKernel
-from ..likelyhood import full_kernelNegativeLogLikelyhood
+from ..likelyhood import full_kernelNegativeLogLikelyhood, full_kernelNegativeLogLikelyhood_nograd
 
 
 def _bayesoptstep(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarray], init_params: ndarray, kernel: BaseKernel, 
@@ -43,9 +43,9 @@ def _bayesoptstep(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarr
     solver = ScipyBoundedMinimize(fun=full_kernelNegativeLogLikelyhood, method=optimize_method)
     result = solver.run(init_params, (1e-3,jnp.inf), X_split, jnp.hstack(Y_data), noise, kernel)
 
-    cov_matrix = full_covariance_matrix(X_split, noise, kernel, result.params)
+    cov_matrix = full_covariance_matrix_nograd(X_split[1], noise, kernel, result.params)
 
-    X_next, Y_next, isgrad = acquisition_func(cov_matrix, jnp.hstack(Y_data), X_split, kernel, result.params, *args)
+    X_next, Y_next, isgrad = acquisition_func(cov_matrix, Y_data, X_split, kernel, result.params, *args)
 
     if isgrad:
         X_next = (X_split[0], jnp.vstack((X_split[1], X_next)))
