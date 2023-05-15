@@ -42,6 +42,11 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     # numerical stability of the inversion and determinant
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
+def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
+    K_NN = CovMatrixFF(X_data, X_data, kernel, params)
+
+    return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
+
 def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
     and the projected input labels in Y_data according to the Projected Process Approximation.
