@@ -169,3 +169,7 @@ Plotting the predicted function together with its confidence interval we can see
 ## Notes
 
 - Only the `eval` methods in the pure (non-combined) kernels need `asserts` for the shape. The gradients and "hessians" as well as any combined kernel `eval` methods call functions that already have asserts.
+
+- Compare randomly sampled points, even grid, and bayes opt to see what works best
+
+- check whats wrong with sparse code
