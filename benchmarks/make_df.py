@@ -45,15 +45,16 @@ def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_s
     for num_f_vals in list_f_vals:
         for num_d_vals in list_d_vals:        
             for optimizer in optimizers:
-                fname = f"{in_dir}/{name}_d{num_d_vals}_f{num_f_vals}_{optimizer}"
-                # fname = f"{in_dir}/{name}_f{num_f_vals}d{num_d_vals}"
                 if sparse:
-                    fname = f"{fname}_sparse{subset_size}"
+                    fname = f"{in_dir}/{name}_d{num_d_vals}_f{num_f_vals}_{optimizer}_sparse{subset_size}"
 
-                means = jnp.load(f"{fname}_means.npz")
-                stds = jnp.load(f"{fname}_stds.npz")
-                # means = jnp.load(f"{fname}means{optimizer}.npz")
-                # stds = jnp.load(f"{fname}stds{optimizer}.npz")
+                    means = jnp.load(f"{fname}_means.npz")
+                    stds = jnp.load(f"{fname}_stds.npz")
+                else:
+                    fname = f"{in_dir}/{name}_f{num_f_vals}d{num_d_vals}"
+
+                    means = jnp.load(f"{fname}means{optimizer}.npz")
+                    stds = jnp.load(f"{fname}stds{optimizer}.npz")
                 
                 means_list = []
                 for key, value in means.items():
@@ -61,8 +62,6 @@ def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_s
                 stds_list = []
                 for key, value in stds.items():
                     stds_list.append(value)
-
-
 
                 # for i, (mean, std) in enumerate(zip(means, stds)):
                 #     is_nan = jnp.any(jnp.isnan(mean)) or jnp.any(jnp.isnan(mean))
