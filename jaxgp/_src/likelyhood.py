@@ -132,3 +132,22 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
                len(Y_data)*jnp.log(2*jnp.pi))
     
     return nlle
+
+def sparse_kernelNegativeLogLikelyhood_nograd(kernel_params: ndarray, X_data: ndarray, Y_data: ndarray, X_ref: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
+    # calculates the covariance between the data and the reference points
+    K_MN = CovMatrixFF(X_ref, X_data, kernel, kernel_params)
+
+    # calculates the covariance between the reference points
+    K_ref = CovMatrixFF(X_ref, X_ref, kernel, kernel_params)
+
+    # directly calculates the logdet of the Nystrom covariance matrix
+    log_matrix = jnp.eye(len(Y_data)) * (1e-6 + noise**2) + K_MN.T@solve(K_ref,K_MN)
+    _, logdet = jnp.linalg.slogdet(log_matrix)
+
+    # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
+    invert_matrix = K_ref*noise**2 + K_MN@K_MN.T
+    nlle = 0.5*(logdet + 
+               (Y_data@Y_data - Y_data@K_MN.T@solve(invert_matrix, K_MN@Y_data)) / noise**2 + 
+               len(Y_data)*jnp.log(2*jnp.pi))
+    
+    return nlle

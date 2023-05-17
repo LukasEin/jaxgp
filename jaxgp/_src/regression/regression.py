@@ -80,7 +80,7 @@ class ExactGPR:
         return jit(predict.full_predict)(X, self.fit_matrix, self.fit_vector, self.X_split, self.kernel, self.kernel_params)
     
 @dataclass
-class ExactGPRnograd:
+class GPRnograd:
     '''A full Gaussian Process regressor model
 
     Parameters
@@ -102,6 +102,8 @@ class ExactGPRnograd:
     kernel: BaseKernel
     kernel_params: ndarray
     noise: Union[float, ndarray]
+    X_ref: ndarray = None
+    is_sparse: bool = False
     optimize_method:str = "L-BFGS-B"
     logger: Logger = None
 
@@ -122,15 +124,23 @@ class ExactGPRnograd:
         '''
         self.X_data = X_data
 
-        solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood_nograd, method=self.optimize_method, callback=self.logger)
-        result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.noise, self.kernel)
+        if self.is_sparse:
+            solver = ScipyBoundedMinimize(fun=likelyhood.sparse_kernelNegativeLogLikelyhood_nograd, method=self.optimize_method, callback=self.logger)
+            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.noise, self.kernel)
+        else:
+            solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood_nograd, method=self.optimize_method, callback=self.logger)
+            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.X_ref, self.noise, self.kernel)
+        
         print(result)
         self.kernel_params = result.params
         if self.logger is not None:
             self.logger.write()
 
-        self.fit_matrix = jit(covar.full_covariance_matrix_nograd)(self.X_data, self.noise, self.kernel, self.kernel_params)
-        self.fit_vector = Y_data
+        if self.is_sparse:
+            self.fit_matrix, self.fit_vector = jit(covar.sparse_covariance_matrix_nograd)(self.X_data, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        else:
+            self.fit_matrix = jit(covar.full_covariance_matrix_nograd)(self.X_data, self.noise, self.kernel, self.kernel_params)
+            self.fit_vector = Y_data
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -145,7 +155,10 @@ class ExactGPRnograd:
         Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
-        return jit(predict.full_predict_nograd)(X, self.fit_matrix, self.fit_vector, self.X_data, self.kernel, self.kernel_params)
+        if self.is_sparse:
+            return jit(predict.sparse_predict_nograd)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        else:
+            return jit(predict.full_predict_nograd)(X, self.fit_matrix, self.fit_vector, self.X_data, self.kernel, self.kernel_params)
     
 @dataclass    
 class SparseGPR:
