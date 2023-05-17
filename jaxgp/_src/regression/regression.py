@@ -126,10 +126,10 @@ class GPRnograd:
 
         if self.is_sparse:
             solver = ScipyBoundedMinimize(fun=likelyhood.sparse_kernelNegativeLogLikelyhood_nograd, method=self.optimize_method, callback=self.logger)
-            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.noise, self.kernel)
+            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.X_ref, self.noise, self.kernel)
         else:
             solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood_nograd, method=self.optimize_method, callback=self.logger)
-            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.X_ref, self.noise, self.kernel)
+            result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_data, Y_data, self.noise, self.kernel)
         
         print(result)
         self.kernel_params = result.params
