@@ -40,12 +40,9 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
 
     # additional small diagonal element added for 
     # numerical stability of the inversion and determinant
-    return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
-
-def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
-    K_NN = CovMatrixFF(X_data, X_data, kernel, params)
-
-    return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
+    # return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
+    diag = jnp.diag_indices(len(K_NN))
+    return K_NN.at[diag].add(noise**2 + 1e-4)
 
 def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
     K_NN = CovMatrixFF(X_data, X_data, kernel, params)
