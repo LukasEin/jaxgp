@@ -125,6 +125,7 @@ class SparseGPR:
             describes the how many of each type of evaluation in X_data are present.
         '''
         self.X_split = X_data
+        self.Y_data = Y_data
 
         solver = ScipyBoundedMinimize(fun=jit(likelyhood.sparse_kernelNegativeLogLikelyhood), method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
@@ -132,7 +133,8 @@ class SparseGPR:
         self.kernel_params = result.params
         if self.logger is not None:
             self.logger.write()
-        self.fit_matrix, self.fit_vector = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        # self.fit_matrix, self.fit_vector = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        self.covar_module = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -147,7 +149,8 @@ class SparseGPR:
         Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
-        return jit(predict.sparse_predict)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        return jit(predict.sparse_predict)(X, self.covar_module, self.Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        # return jit(predict.sparse_predict)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
     
 @dataclass
 class GPRnograd:

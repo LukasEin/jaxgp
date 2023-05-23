@@ -6,6 +6,7 @@ from jax.numpy import ndarray
 
 from .kernels import BaseKernel
 from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x, _CovVector_Id
+from .covar_module import SparseCovarModule
 
 
 def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
@@ -49,7 +50,7 @@ def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray],
 
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
-def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovarModule: #-> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
     and the projected input labels in Y_data according to the Projected Process Approximation.
 
@@ -85,22 +86,25 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
         
     # added small positive diagonal to make the matrix positive definite
-    # sparse_covmatrix = noise**2 * K_ref + K_MN@K_MN.T
-    # projected_labels = K_MN@Y_data
+    # sparse_covmatrix =  K_ref + K_MN@K_MN.T / noise**2
+    # projected_labels = K_MN@Y_data / noise**2
     # diag = jnp.diag_indices(len(sparse_covmatrix))
     # return sparse_covmatrix.at[diag].add(1e-4), projected_labels
 
-    # FITC
-    func = vmap(lambda v: kernel.eval(v, v, params), in_axes=(0))(X_split[0])
-    der = vmap(jnp.ravel, in_axes=0)(vmap(lambda v: kernel.jac(v, v, params), in_axes=(0))(X_split[1]))
-    full_diag = jnp.vstack((func, der))
-    sparse_diag = _build_xT_Ainv_x(K_ref, K_MN.T).reshape(-1,1)
-    L = (full_diag - sparse_diag).reshape(-1)
+    return SparseCovarModule(K_MN.T, K_ref, noise)
 
-    sparse_covmatrix = noise**2 * K_ref + K_MN@jnp.diag(L)@K_MN.T
-    projected_labels = K_MN@(L*Y_data)
-    diag = jnp.diag_indices(len(sparse_covmatrix))
-    return sparse_covmatrix.at[diag].add(1e-4), projected_labels
+    # # FITC
+    # # ---------------------------------------------------------------------------
+    # func = vmap(lambda v: kernel.eval(v, v, params), in_axes=(0))(X_split[0])
+    # der = vmap(jnp.ravel, in_axes=0)(vmap(lambda v: kernel.jac(v, v, params), in_axes=(0))(X_split[1]))
+    # full_diag = jnp.vstack((func, der))
+    # sparse_diag = _build_xT_Ainv_x(K_ref, K_MN.T).reshape(-1,1)
+    # L = (full_diag - sparse_diag).reshape(-1)
+
+    # sparse_covmatrix = noise**2 * K_ref + K_MN@jnp.diag(L)@K_MN.T
+    # projected_labels = K_MN@(L*Y_data)
+    # diag = jnp.diag_indices(len(sparse_covmatrix))
+    # return sparse_covmatrix.at[diag].add(1e-4), projected_labels
 
 def sparse_covariance_matrix_nograd(X_data: ndarray, Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     # calculates the covariance between the training points and the reference points
