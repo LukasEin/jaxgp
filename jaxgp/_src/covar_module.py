@@ -15,7 +15,7 @@ class SparseCovarModule:
 
     def __post_init__(self):
         diag = jnp.diag_indices(len(self.K_MM))
-        self.K_inv_cho = jsp.linalg.cho_factor(self.K_MM.at[diag].add(1e-2) + self.K_NM.T@jnp.diag(1 / self.fitc_diag)@self.K_NM)
+        self.K_inv_cho = jsp.linalg.cho_factor((self.K_MM + self.K_NM.T@jnp.diag(1 / self.fitc_diag)@self.K_NM))#.at[diag].add(5e-2))
 
     def logdet(self):
         _, logdet_MM = jnp.linalg.slogdet(self.K_MM)

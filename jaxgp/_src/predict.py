@@ -149,7 +149,7 @@ def sparse_predict(X: ndarray, covar_module: SparseCovarModule, Y_data: ndarray,
     K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
 
     helper = vmap(lambda A, x: x.T@solve(A,x), in_axes=(None, 0))
-    first_temp = helper(K_ref + jnp.eye(len(X_ref)) * 1e-4, ref_vectors)
+    first_temp = helper(K_ref + jnp.eye(len(X_ref)) * 1e-2, ref_vectors)
     second_temp = vmap(lambda A, x: x.T@jsp.linalg.cho_solve(A,x), in_axes=(None, 0))(covar_module.K_inv_cho, ref_vectors)
     
     stds = jnp.sqrt(X_cov - first_temp + second_temp) 
