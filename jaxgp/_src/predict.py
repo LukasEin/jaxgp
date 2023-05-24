@@ -141,7 +141,7 @@ def sparse_predict(X: ndarray, covar_module: SparseCovarModule, Y_data: ndarray,
     '''
     ref_vectors = CovMatrixFF(X, X_ref, kernel, params)
 
-    means = ref_vectors@jsp.linalg.cho_solve(covar_module.K_inv_cho,covar_module.K_NM.T@Y_data) / noise**2
+    means = ref_vectors@jsp.linalg.cho_solve(covar_module.K_inv_cho,covar_module.K_NM.T@(Y_data / covar_module.fitc_diag))
     # means = ref_vectors@jsp.linalg.cho_solve(covar_module.K_inv_cho,covar_module.K_NM.T@Y_data)
 
     X_cov = _CovVector_Id(X, kernel, params)
