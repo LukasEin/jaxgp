@@ -3,11 +3,15 @@ from typing import Tuple, Union
 import jax.numpy as jnp
 from jax import jit, vmap
 from jax.numpy import ndarray
+import jax.scipy as jsp
 
 from .kernels import BaseKernel
 from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x, _CovVector_Id
 from .covar_module import SparseCovarModule
+from collections import namedtuple
 
+
+SparseCovar = namedtuple("SparseCovar", ("k_ref", "k_inv", "diag", "proj_labs"))
 
 def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Calculates the full covariance matrix over the input samples in X_split.
@@ -50,7 +54,7 @@ def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray],
 
     return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
 
-def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovarModule: #-> Tuple[ndarray, ndarray]:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar: #-> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
     and the projected input labels in Y_data according to the Projected Process Approximation.
 
@@ -99,7 +103,18 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     sparse_diag = _build_xT_Ainv_x(K_ref, K_MN.T)
     fitc_diag = (full_diag - sparse_diag) + noise**2
 
-    return SparseCovarModule(K_MN.T, K_ref, fitc_diag)
+    
+    # diag = jnp.diag_indices(len(K_ref))
+    # self.K_MM = self.K_MM.at[diag].add(1e-2)
+    # self.fitc_diag = self.fitc_diag + 5e-2
+    K_inv = K_ref + K_MN@jnp.diag(1 / fitc_diag)@K_MN.T
+    K_inv = jsp.linalg.cho_factor(K_inv)
+
+    K_ref = jsp.linalg.cho_factor(K_ref)
+
+    projected_label = K_MN@(Y_data / fitc_diag)
+
+    return SparseCovar(K_ref, K_inv, fitc_diag, projected_label)
 
 def sparse_covariance_matrix_nograd(X_data: ndarray, Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     # calculates the covariance between the training points and the reference points
