@@ -1,19 +1,24 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, NamedTuple
 
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import vmap
 from jax.numpy import ndarray
 import jax.scipy as jsp
 
 from .kernels import BaseKernel
-from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x, _CovVector_Id
-from .covar_module import SparseCovarModule
-from collections import namedtuple
+from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x
 
+class SparseCovar(NamedTuple):
+    k_ref: ndarray
+    k_inv: ndarray
+    diag: ndarray
+    proj_labs: ndarray
 
-SparseCovar = namedtuple("SparseCovar", ("k_ref", "k_inv", "diag", "proj_labs"))
+class FullCovar(NamedTuple):
+    k_nn: ndarray
+    diag: ndarray
 
-def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
+def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> FullCovar:
     '''Calculates the full covariance matrix over the input samples in X_split.
 
     Parameters
@@ -46,13 +51,8 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     # additional small diagonal element added for 
     # numerical stability of the inversion and determinant
     # return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
-    diag = jnp.diag_indices(len(K_NN))
-    return K_NN.at[diag].add(noise**2 + 1e-4)
-
-def full_covariance_matrix_nograd(X_data: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> ndarray:
-    K_NN = CovMatrixFF(X_data, X_data, kernel, params)
-
-    return (jnp.eye(len(K_NN)) * (noise**2 + 1e-6) + K_NN)
+    diag = jnp.ones(len(K_NN))*noise**2
+    return FullCovar(K_NN, diag)
 
 def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar: #-> Tuple[ndarray, ndarray]:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
@@ -115,15 +115,3 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     projected_label = K_MN@(Y_data / fitc_diag)
 
     return SparseCovar(K_ref, K_inv, fitc_diag, projected_label)
-
-def sparse_covariance_matrix_nograd(X_data: ndarray, Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
-    # calculates the covariance between the training points and the reference points
-    K_MN = CovMatrixFF(X_ref, X_data, kernel, params)
-
-    # calculates the covariance between each pair of reference points
-    K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
-        
-    # added small positive diagonal to make the matrix positive definite
-    sparse_covmatrix = noise**2 * K_ref + K_MN@K_MN.T + jnp.eye(len(X_ref)) * 1e-4
-    projected_labels = K_MN@Y_data
-    return sparse_covmatrix, projected_labels

@@ -149,7 +149,7 @@ class SparseGPR:
         Tuple[ndarray, ndarray]
             Posterior means and stds
         '''
-        return jit(predict.sparse_predict)(X, self.covar_module, self.Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        return jit(predict.sparse_predict)(X, self.covar_module, self.X_ref, self.kernel, self.kernel_params)
         # return jit(predict.sparse_predict)(X, self.fit_matrix, self.fit_vector, self.X_ref, self.noise, self.kernel, self.kernel_params)
     
 @dataclass
