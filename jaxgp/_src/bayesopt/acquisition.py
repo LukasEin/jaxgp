@@ -8,7 +8,7 @@ from jaxopt import ScipyBoundedMinimize
 from ..kernels import BaseKernel
 from ..predict import full_predict_nograd
 from .. import covar
-from .. import likelyhood
+from .. import likelihood
 
 # def upper_confidence_bound(cov_matrix, Y_data, X_split, kernel, params, grid, eval_function):
         
@@ -64,7 +64,7 @@ def maximum_confidence_grad(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndar
     Tuple[Tuple[ndarray, ndarray], ndarray, bool]
         _description_
     '''
-    solver = ScipyBoundedMinimize(fun=likelyhood.full_kernelNegativeLogLikelyhood, method=optimize_method)
+    solver = ScipyBoundedMinimize(fun=likelihood.full_kernelNegativeLogLikelyhood, method=optimize_method)
     result = solver.run(init_params, (1e-3,jnp.inf), X_split, jnp.vstack(Y_data), noise, kernel)
     
     cov_matrix = covar.full_covariance_matrix_nograd(X_split[1], noise, kernel, result.params)

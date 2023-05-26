@@ -12,7 +12,7 @@ from .utils import (CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x,
 from .covar import SparseCovar, FullCovar
 
 
-def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
+def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of full_covmatrix and Y_data for the full gpr model
 
@@ -44,11 +44,11 @@ def full_predict(X: ndarray, full_covmatrix: ndarray, Y_data: ndarray, X_split: 
     derivative_vectors = CovMatrixFD(X, X_split[1], kernel, params)
     full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
-    means = full_vectors@solve(full_covmatrix,Y_data,assume_a="pos")
+    means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),Y_data)
 
-    X_cov = _CovVector_Id(X, kernel, params)  
-    temp = _build_xT_Ainv_x(full_covmatrix, full_vectors)      
-    stds = jnp.sqrt(X_cov - temp)
+    K_XX = _CovVector_Id(X, kernel, params)
+    K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
+    stds = jnp.sqrt(K_XX - K_XNNX)
     
     return means, stds
 
@@ -84,14 +84,13 @@ def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel
     '''
     ref_vectors = CovMatrixFF(X, X_ref, kernel, params)
 
-    means = ref_vectors@jsp.linalg.cho_solve(covar_module.k_inv,covar_module.proj_labs)
+    means = ref_vectors@jsp.linalg.cho_solve((covar_module.k_inv, False),covar_module.proj_labs)
 
-    X_cov = _CovVector_Id(X, kernel, params)
+    K_XX = _CovVector_Id(X, kernel, params)
 
-    helper = vmap(lambda A, x: x.T@solve(A,x), in_axes=(None, 0))
-    first_temp = helper(covar_module.k_ref + jnp.eye(len(X_ref)) * 1e-2, ref_vectors)
-    second_temp = vmap(lambda A, x: x.T@jsp.linalg.cho_solve(A,x), in_axes=(None, 0))(covar_module.k_inv, ref_vectors)
+    Q_XX = vmap(lambda A, x: x.T@solve(A,x), in_axes=(None, 0))(covar_module.k_ref, ref_vectors)
+    K_XMMX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_inv, ref_vectors)
     
-    stds = jnp.sqrt(X_cov - first_temp + second_temp) 
+    stds = jnp.sqrt(K_XX - Q_XX + K_XMMX) 
     
     return means, stds

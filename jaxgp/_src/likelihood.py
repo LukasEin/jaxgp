@@ -8,7 +8,6 @@ import jax.scipy as jsp
 
 from .covar import full_covariance_matrix, sparse_covariance_matrix
 from .kernels import BaseKernel
-from .utils import CovMatrixFD, CovMatrixFF
 
 
 def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
@@ -36,18 +35,18 @@ def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarr
         Negative Log Likelyhood estimate for full GPR
     '''
     # calculates the full covariance matrix
-    fit_matrix = full_covariance_matrix(X_split, noise, kernel, kernel_params)
-    fit_vector = Y_data.reshape(-1)
+    covar_module = full_covariance_matrix(X_split, noise, kernel, kernel_params)
 
     # calculates the logdet of the full covariance matrix
-    _, logdet = jnp.linalg.slogdet(fit_matrix)
+    K_NN_diag = jnp.diag(covar_module.k_nn)
+    logdet = 2*jnp.sum(jnp.log(K_NN_diag))
+
+    fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
 
     # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-    nlle = 0.5*(logdet + 
-               fit_vector@solve(fit_matrix, fit_vector, assume_a="pos") + 
-               len(fit_vector)*jnp.log(2*jnp.pi))
+    nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
-    return nlle
+    return nlle / len(Y_data)
 
 # def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[ndarray, float], kernel: BaseKernel) -> float:
 #     '''Negative log Likelyhood for sparse GPR (PPA). Y_data ~ N(0,[id*s**2 + K_MN.T@K_MM**(-1)@K_MN]) which is the same as for Nystrom approximation.
@@ -125,18 +124,20 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
     covar_module = sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, kernel_params)
 
     # Logdet calculations
-    K_ref_diag = jnp.diag(covar_module.k_ref[0])
+    # K_ref_diag = jnp.diag(covar_module.k_ref[0])
+    K_ref_diag = jnp.diag(covar_module.k_ref)
     logdet_K_ref = 2*jnp.sum(jnp.log(K_ref_diag))
-    K_inv_diag = jnp.diag(covar_module.k_inv[0])
+    K_inv_diag = jnp.diag(covar_module.k_inv)
+    # K_inv_diag = jnp.diag(covar_module.k_inv[0])
     logdet_K_inv = 2*jnp.sum(jnp.log(K_inv_diag))
     logdet_fitc = jnp.sum(jnp.log(covar_module.diag))
 
     # Fit calculation
-    fit = covar_module.proj_labs@jsp.linalg.cho_solve(covar_module.k_inv, covar_module.proj_labs) + Y_data@(Y_data / covar_module.diag)
+    fit = covar_module.proj_labs@jsp.linalg.cho_solve((covar_module.k_inv, False), covar_module.proj_labs) + Y_data@(Y_data / covar_module.diag)
 
     nlle = 0.5*(logdet_fitc + logdet_K_inv + logdet_K_ref + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
-    return nlle
+    return jnp.where(jnp.isnan(nlle), jnp.inf, nlle) / len(Y_data)
 
     # logdet = covar_module.logdet()
 

@@ -8,7 +8,7 @@ from jaxopt import ScipyBoundedMinimize
 
 from ..covar import full_covariance_matrix, full_covariance_matrix_nograd
 from ..kernels import BaseKernel
-from ..likelyhood import full_kernelNegativeLogLikelyhood
+from ..likelihood import full_kernelNegativeLogLikelyhood
 
 
 def _bayesoptstep(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarray], init_params: ndarray, kernel: BaseKernel, 

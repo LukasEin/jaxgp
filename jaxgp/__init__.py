@@ -1,1 +1,1 @@
-from . import covar, kernels, likelyhood, predict, regression, utils
+from . import covar, kernels, likelihood, predict, regression, utils
