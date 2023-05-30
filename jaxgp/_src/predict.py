@@ -48,7 +48,7 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
 
     K_XX = _CovVector_Id(X, kernel, params)
     K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
-    stds = jnp.sqrt(K_XX - K_XNNX)
+    stds = K_XX - K_XNNX
     
     return means, stds
 
