@@ -135,7 +135,7 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
     logdet_fitc = jnp.sum(jnp.log(covar_module.diag))
 
     # Fit calculation
-    fit = covar_module.proj_labs@jsp.linalg.cho_solve((covar_module.k_inv, False), covar_module.proj_labs) + Y_data@(Y_data / covar_module.diag)
+    fit = Y_data@(Y_data / covar_module.diag) - covar_module.proj_labs@jsp.linalg.cho_solve((covar_module.k_inv, False), covar_module.proj_labs)
     # vec = jsp.linalg.solve_triangular(covar_module.k_inv, covar_module.proj_labs)
     # fit = vec.T@vec + Y_data@(Y_data / covar_module.diag)
 
