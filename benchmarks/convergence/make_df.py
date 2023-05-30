@@ -13,7 +13,7 @@ def maxstd(std):
     return jnp.max(std)
 
 def true_in_conf(Y, prediction, std):
-    inside = jnp.where(jnp.less(Y,prediction+std) * jnp.greater(Y,prediction-std), 1.0, 0.0)
+    inside = jnp.where(jnp.less(Y,prediction+jnp.sqrt(std)) * jnp.greater(Y,prediction-jnp.sqrt(std)), 1.0, 0.0)
     return jnp.mean(inside)
 
 def make_dict(num_f_vals, num_d_vals, optimizer, fun, eval_grid, predictions, stds):
@@ -70,14 +70,12 @@ def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_s
             for optimizer in optimizers:
                 if sparse:
                     fname = f"{in_dir}/{name}_d{num_d_vals}_f{num_f_vals}_{optimizer}_sparse{subset_size}"
-
-                    means = jnp.load(f"{fname}_means(1).npz")
-                    stds = jnp.load(f"{fname}_stds(1).npz")
                 else:
-                    fname = f"{in_dir}/{name}_f{num_f_vals}d{num_d_vals}"
+                    fname = f"{in_dir}/{name}_d{num_d_vals}_f{num_f_vals}_{optimizer}"
+                    # fname = f"{in_dir}/{name}_f{num_f_vals}d{num_d_vals}"
 
-                    means = jnp.load(f"{fname}means{optimizer}.npz")
-                    stds = jnp.load(f"{fname}stds{optimizer}.npz")
+                means = jnp.load(f"{fname}_means.npz")
+                stds = jnp.load(f"{fname}_stds.npz")
                 
                 means_list = []
                 for key, value in means.items():

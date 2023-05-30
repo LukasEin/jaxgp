@@ -44,9 +44,16 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
     derivative_vectors = CovMatrixFD(X, X_split[1], kernel, params)
     full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
+    # vec = jsp.linalg.solve_triangular(covar_module.k_nn, Y_data, lower=True)
+    # means = full_vectors@vec
     means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),Y_data)
 
     K_XX = _CovVector_Id(X, kernel, params)
+    
+    # def _contract(A, x):
+    #     vec = jsp.linalg.solve_triangular(A, x, lower=True)
+    #     return vec.T@vec
+    # K_XNNX = vmap(_contract, in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
     K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
     stds = K_XX - K_XNNX
     

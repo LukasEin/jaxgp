@@ -42,6 +42,8 @@ def full_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[ndarr
     logdet = 2*jnp.sum(jnp.log(K_NN_diag))
 
     fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
+    # vec = jsp.linalg.solve_triangular(covar_module.k_nn, Y_data, lower=True)
+    # fit = vec.T@vec
 
     # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
     nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
@@ -134,6 +136,8 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
 
     # Fit calculation
     fit = covar_module.proj_labs@jsp.linalg.cho_solve((covar_module.k_inv, False), covar_module.proj_labs) + Y_data@(Y_data / covar_module.diag)
+    # vec = jsp.linalg.solve_triangular(covar_module.k_inv, covar_module.proj_labs)
+    # fit = vec.T@vec + Y_data@(Y_data / covar_module.diag)
 
     nlle = 0.5*(logdet_fitc + logdet_K_inv + logdet_K_ref + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
