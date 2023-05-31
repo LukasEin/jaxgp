@@ -91,11 +91,14 @@ def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel
     '''
     ref_vectors = CovMatrixFF(X, X_ref, kernel, params)
 
-    means = ref_vectors@jsp.linalg.cho_solve((covar_module.k_inv, False),covar_module.proj_labs)
+    means_left = jsp.linalg.solve_triangular(covar_module.U_inv.T, jsp.linalg.solve_triangular(covar_module.U_ref.T, ref_vectors.T, lower=True), lower=True)
+
+    means = means_left.T@covar_module.proj_labs
 
     K_XX = _CovVector_Id(X, kernel, params)
 
-    Q_XX = vmap(lambda A, x: x.T@solve(A,x), in_axes=(None, 0))(covar_module.k_ref, ref_vectors)
+    # TODO:
+    Q_XX = vmap(lambda A, x: x.T@jsp.linalg.solve_triangular(A,x), in_axes=(None, 0))(covar_module.U_ref, ref_vectors)
     K_XMMX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_inv, ref_vectors)
     
     stds = jnp.sqrt(K_XX - Q_XX + K_XMMX) 

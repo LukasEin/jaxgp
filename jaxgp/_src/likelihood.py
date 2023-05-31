@@ -126,26 +126,14 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
     covar_module = sparse_covariance_matrix(X_split, Y_data, X_ref, noise, kernel, kernel_params)
 
     # Logdet calculations
-    # K_ref_diag = jnp.diag(covar_module.k_ref[0])
-    K_ref_diag = jnp.diag(covar_module.k_ref)
-    logdet_K_ref = 2*jnp.sum(jnp.log(K_ref_diag))
-    K_inv_diag = jnp.diag(covar_module.k_inv)
-    # K_inv_diag = jnp.diag(covar_module.k_inv[0])
-    logdet_K_inv = 2*jnp.sum(jnp.log(K_inv_diag))
+    U_inv_diag = jnp.diag(covar_module.U_inv)
+    logdet_K_inv = 2*jnp.sum(jnp.log(U_inv_diag))
     logdet_fitc = jnp.sum(jnp.log(covar_module.diag))
 
     # Fit calculation
-    fit = Y_data@(Y_data / covar_module.diag) - covar_module.proj_labs@jsp.linalg.cho_solve((covar_module.k_inv, False), covar_module.proj_labs)
-    # vec = jsp.linalg.solve_triangular(covar_module.k_inv, covar_module.proj_labs)
-    # fit = vec.T@vec + Y_data@(Y_data / covar_module.diag)
+    Y_scaled = Y_data / jnp.sqrt(covar_module.diag)
+    fit = Y_scaled.T@Y_scaled - covar_module.proj_labs.T@covar_module.proj_labs
 
-    nlle = 0.5*(logdet_fitc + logdet_K_inv + logdet_K_ref + fit + len(Y_data)*jnp.log(2*jnp.pi))
+    nlle = 0.5*(logdet_fitc + logdet_K_inv + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
     return jnp.where(jnp.isnan(nlle), jnp.inf, nlle) / len(Y_data)
-
-    # logdet = covar_module.logdet()
-
-    # contraction = covar_module.contract(Y_data, Y_data)
-
-    # efficiently calculates Y.T@C**(-1)@Y and adds logdet to get the final result
-    # nlle = 0.5*(logdet + contraction + len(Y_data)*jnp.log(2*jnp.pi))

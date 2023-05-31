@@ -52,7 +52,7 @@ We will model a simple sin function, where the evaluation is noisy:
 
 
 ```python
-# true function is a noisy lennard jones potential
+# true function is a noisy sin function
 def sin(x, noise=0.0, key = random.PRNGKey(0)):
     return jnp.sin(x) + random.normal(key,x.shape, dtype=jnp.float32)*noise
 

@@ -9,8 +9,8 @@ from .kernels import BaseKernel
 from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x
 
 class SparseCovar(NamedTuple):
-    k_ref: ndarray
-    k_inv: ndarray
+    U_ref: ndarray
+    U_inv: ndarray
     diag: ndarray
     proj_labs: ndarray
 
@@ -82,47 +82,43 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     Tuple[ndarray, ndarray]
         sparse (PPA) covariance matrix, projected input labels
     '''
+    # Hardcoded squared noise between the reference points
+    noise_ref = 1e-2
+
     # calculates the covariance between the training points and the reference points
     KF = CovMatrixFF(X_ref, X_split[0], kernel, params)
     KD = CovMatrixFD(X_ref, X_split[1], kernel, params)
-    
     K_MN = jnp.hstack((KF,KD))
 
     # calculates the covariance between each pair of reference points
     K_ref = CovMatrixFF(X_ref, X_ref, kernel, params)
     diag = jnp.diag_indices(len(K_ref))
+    K_ref = K_ref.at[diag].add(noise_ref**2)
 
-    # added small positive diagonal to make the matrix positive definite
-    K_ref = K_ref.at[diag].add(1e-4)
-    K_ref_cho, _ = jsp.linalg.cho_factor(K_ref)
-    # K_ref = jsp.linalg.cholesky(K_ref)
-        
-    # sparse_covmatrix =  K_ref + K_MN@K_MN.T / noise**2
-    # projected_labels = K_MN@Y_data / noise**2
-    # diag = jnp.diag_indices(len(sparse_covmatrix))
-    # return sparse_covmatrix.at[diag].add(1e-4), projected_labels
+    # upper cholesky factor of K_ref || U_ref.T@U_ref = K_ref
+    U_ref = jsp.linalg.cholesky(K_ref)
 
-    # FITC
-    # ---------------------------------------------------------------------------
+    # V is solution to U_ref.T@V = K_MN
+    V = jsp.linalg.solve_triangular(U_ref.T, K_MN, lower=True)
+
+    # diag(K_NN)
     func = vmap(lambda v: kernel.eval(v, v, params), in_axes=(0))(X_split[0])
     der = jnp.ravel(vmap(lambda v: jnp.diag(kernel.jac(v, v, params)), in_axes=(0))(X_split[1]))
-    full_diag = jnp.hstack((func, der))
-    # def _contract(A, x):
-    #     vec = jsp.linalg.solve_triangular(A, x)
-    #     return vec.T@vec
-    # sparse_diag = vmap(_contract, in_axes=(None, 0))(K_ref, K_MN.T)
-    sparse_diag = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(K_ref_cho, K_MN.T)    
-    fitc_diag = (full_diag - sparse_diag) + noise**2
+    K_NN_diag = jnp.hstack((func, der))
+    # diag(Q_NN)
+    Q_NN_diag = vmap(lambda x: x.T@x, in_axes=(1,))(V)    
+    # diag(K_NN) + noise**2 - diag(Q_NN)
+    fitc_diag = K_NN_diag + noise**2 - Q_NN_diag
     
-    # diag = jnp.diag_indices(len(K_ref))
-    # self.K_MM = self.K_MM.at[diag].add(1e-2)
-    # self.fitc_diag = self.fitc_diag + 5e-2
-    K_inv = K_ref + K_MN@jnp.diag(1 / fitc_diag)@K_MN.T
-    diag = jnp.diag_indices(len(K_inv))
-    K_inv = K_inv.at[diag].add(1e-4)
-    K_inv, _ = jsp.linalg.cho_factor(K_inv)
-    # K_inv = jsp.linalg.cholesky(K_inv)
+    def _mul_diag(diag, matrix):
+        return diag*matrix
+    mul_diag = vmap(_mul_diag, in_axes=(0,0))
 
-    projected_label = K_MN@(Y_data / fitc_diag)
+    # (1 / sqrt(fitc_diag))@V.T
+    V_scaled = mul_diag(1 / jnp.sqrt(fitc_diag), V.T).T
 
-    return SparseCovar(K_ref_cho, K_inv, fitc_diag, projected_label)
+    U_inv = jsp.linalg.cholesky((V_scaled@V_scaled.T).at[diag].add(1.0))
+
+    projected_label = jsp.linalg.solve_triangular(U_inv.T, V@(Y_data / fitc_diag), lower=True)
+
+    return SparseCovar(U_ref, U_inv, fitc_diag, projected_label)
