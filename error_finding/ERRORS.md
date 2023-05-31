@@ -64,6 +64,7 @@ The function `sparse_covariance_matrix` calculates the following:
 - :white_check_mark: $K(\mathbf{x}_I, \mathbf{x}_I):=$`K_MM` which was already checked to be correct in `compare_covar_pytorch.ipynb`
 
 - :white_check_mark: $B_I(\mathbf{x}, \mathbf{x})$. Since $\Lambda(\mathbf{x}, \mathbf{x})$, `K_MM` and $K(\mathbf{x}_I, \mathbf{x}):=$`K_MN` have already been checked as correct it is only necessary to check if the combination of those matrices follows the mathematical equation. The code to calculate it looks as follows, which has the same form as equation (3): `K_inv = K_ref + K_MN@jnp.diag(1 / fitc_diag)@K_MN.T`
+:heavy_exclamation_mark: This was implemented incorrectly since `K_ref` was already cholesky transformed before its use in the equation before :heavy_exclamation_mark:
 - :white_check_mark: $K(\mathbf{x}_I, \mathbf{x})\Lambda^{-1}(\mathbf{x}, \mathbf{x})Y$ the labels $Y$ projected into the reference space. Again since all elements of this equation are already checked to be correct, the only thing left is to see if the calculation is correctly implemented: `projected_label = K_MN@(Y_data / fitc_diag)` which is exactly how it is supposed to be. The MVM between the diagonal matrix and the data vector is done via element-wise division.
 
 ## :x: Correctly calculating the log marginal likelihood
