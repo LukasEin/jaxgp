@@ -52,8 +52,8 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     diag = jnp.diag_indices(len(K_NN))
     K_NN = K_NN.at[diag].add(noise**2)
 
-    K_NN, _ = jsp.linalg.cho_factor(K_NN)
-    # K_NN = jsp.linalg.cholesky(K_NN)
+    # K_NN, _ = jsp.linalg.cho_factor(K_NN)
+    K_NN = jsp.linalg.cholesky(K_NN)
     return FullCovar(K_NN)
 
 def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar: #-> Tuple[ndarray, ndarray]:

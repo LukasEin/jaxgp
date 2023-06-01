@@ -67,8 +67,6 @@ The function `sparse_covariance_matrix` calculates the following:
 :heavy_exclamation_mark: This was implemented incorrectly since `K_ref` was already cholesky transformed before its use in the equation before :heavy_exclamation_mark:
 - :white_check_mark: $K(\mathbf{x}_I, \mathbf{x})\Lambda^{-1}(\mathbf{x}, \mathbf{x})Y$ the labels $Y$ projected into the reference space. Again since all elements of this equation are already checked to be correct, the only thing left is to see if the calculation is correctly implemented: `projected_label = K_MN@(Y_data / fitc_diag)` which is exactly how it is supposed to be. The MVM between the diagonal matrix and the data vector is done via element-wise division.
 
-## :x: Correctly calculating the log marginal likelihood
+## :white_check_mark: Correctly calculating the log marginal likelihood
 
-When calculating the log marginal likelihood it most of the time return a `nan` value. To see where this comes from, I let the function return all intermediate results. The culprit here is `K_inv` or $B_I(\mathbf{x}, \mathbf{x})$ from the previous point. Even though it is implemented correctly and I even added a small diagonal addition to it of $10^{-4}$ the **Cholesky factorization** returns a decomposition that is an upper triagular matrix with only nan values on in the upper triangular part.
-
-The maximum elements of `K_inv` become hugh, maybe divide by large number first lets see.
+IT WORKS

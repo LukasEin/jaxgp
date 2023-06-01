@@ -50,12 +50,12 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
 
     K_XX = _CovVector_Id(X, kernel, params)
     
-    # def _contract(A, x):
-    #     vec = jsp.linalg.solve_triangular(A, x, lower=True)
-    #     return vec.T@vec
-    # K_XNNX = vmap(_contract, in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
-    K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
-    stds = K_XX - K_XNNX
+    def _contract(A, x):
+        vec = jsp.linalg.solve_triangular(A.T, x, lower=True)
+        return vec.T@vec
+    K_XNNX = vmap(_contract, in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
+    # K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
+    stds = jnp.sqrt(K_XX - K_XNNX)
     
     return means, stds
 
@@ -98,8 +98,12 @@ def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel
     K_XX = _CovVector_Id(X, kernel, params)
 
     # TODO:
-    Q_XX = vmap(lambda A, x: x.T@jsp.linalg.solve_triangular(A,x), in_axes=(None, 0))(covar_module.U_ref, ref_vectors)
-    K_XMMX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_inv, ref_vectors)
+    def _triangle_contract(A, x):
+        sol = jsp.linalg.solve_triangular(A.T,x, lower=True)
+        return sol.T@sol
+    triangle_contract = vmap(_triangle_contract, in_axes=(None, 0))
+    Q_XX = triangle_contract(covar_module.U_ref, ref_vectors)
+    K_XMMX = triangle_contract(covar_module.U_inv@covar_module.U_ref, ref_vectors)
     
     stds = jnp.sqrt(K_XX - Q_XX + K_XMMX) 
     
