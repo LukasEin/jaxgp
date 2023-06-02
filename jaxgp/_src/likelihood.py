@@ -1,9 +1,7 @@
 from typing import Union
 
 import jax.numpy as jnp
-from jax import jit, vmap
 from jax.numpy import ndarray
-from jax.scipy.linalg import solve
 import jax.scipy as jsp
 
 from .covar import full_covariance_matrix, sparse_covariance_matrix
@@ -89,5 +87,4 @@ def sparse_kernelNegativeLogLikelyhood(kernel_params: ndarray, X_split: list[nda
 
     nlle = 0.5*(logdet_fitc + logdet_K_inv + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
-    # return jnp.where(jnp.isnan(nlle), jnp.inf, nlle) / len(Y_data)
     return nlle / len(Y_data)

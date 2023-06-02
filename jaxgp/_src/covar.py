@@ -1,12 +1,13 @@
-from typing import Tuple, Union, NamedTuple
+from typing import NamedTuple, Tuple, Union
 
 import jax.numpy as jnp
+import jax.scipy as jsp
 from jax import vmap
 from jax.numpy import ndarray
-import jax.scipy as jsp
 
 from .kernels import BaseKernel
-from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x
+from .utils import CovMatrixDD, CovMatrixFD, CovMatrixFF, matmul_diag
+
 
 class SparseCovar(NamedTuple):
     U_ref: ndarray
@@ -47,18 +48,15 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     K_NN = jnp.vstack((jnp.hstack((KF,KD)), 
                        jnp.hstack((KD.T,KDD))))
     
-    # additional small diagonal element added for 
-    # numerical stability of the inversion and determinant
     diag = jnp.diag_indices(len(K_NN))
     K_NN = K_NN.at[diag].add(noise**2)
 
-    # K_NN, _ = jsp.linalg.cho_factor(K_NN)
     K_NN = jsp.linalg.cholesky(K_NN)
     return FullCovar(K_NN)
 
-def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar: #-> Tuple[ndarray, ndarray]:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar:
     '''Calculates the sparse covariance matrix over the input samples in X_split 
-    and the projected input labels in Y_data according to the Projected Process Approximation.
+    and the projected input labels in Y_data according to FITC.
 
     Parameters
     ----------
@@ -80,7 +78,7 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     Returns
     -------
     Tuple[ndarray, ndarray]
-        sparse (PPA) covariance matrix, projected input labels
+        sparse (FITC) covariance matrix, projected input labels
     '''
     # Hardcoded squared noise between the reference points
     noise_ref = 1e-2
@@ -97,7 +95,6 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
 
     # upper cholesky factor of K_ref || U_ref.T@U_ref = K_ref
     U_ref = jsp.linalg.cholesky(K_ref)
-    del K_ref
 
     # V is solution to U_ref.T@V = K_MN
     V = jsp.linalg.solve_triangular(U_ref.T, K_MN, lower=True)
@@ -110,15 +107,9 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     Q_NN_diag = vmap(lambda x: x.T@x, in_axes=(1,))(V)    
     # diag(K_NN) + noise**2 - diag(Q_NN)
     fitc_diag = K_NN_diag + noise**2 - Q_NN_diag
-    del K_NN_diag
-    del Q_NN_diag
-    
-    def _mul_diag(diag, matrix):
-        return diag*matrix
-    mul_diag = vmap(_mul_diag, in_axes=(0,0))
 
     # (1 / sqrt(fitc_diag))@V.T
-    V_scaled = mul_diag(1 / jnp.sqrt(fitc_diag), V.T).T
+    V_scaled = matmul_diag(1 / jnp.sqrt(fitc_diag), V.T).T
 
     U_inv = jsp.linalg.cholesky((V_scaled@V_scaled.T).at[diag].add(1.0))
 

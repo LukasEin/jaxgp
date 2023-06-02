@@ -1,15 +1,12 @@
-from typing import Tuple, Union
+from typing import Tuple
 
 import jax.numpy as jnp
-from jax import jit, vmap
-from jax.numpy import ndarray
-from jax.scipy.linalg import solve
 import jax.scipy as jsp
+from jax.numpy import ndarray
 
+from .covar import FullCovar, SparseCovar
 from .kernels import BaseKernel
-from .utils import (CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x,
-                    _CovVector_Id)
-from .covar import SparseCovar, FullCovar
+from .utils import CovMatrixFD, CovMatrixFF, _CovVector_Id, inner_map
 
 
 def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
@@ -44,24 +41,18 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
     derivative_vectors = CovMatrixFD(X, X_split[1], kernel, params)
     full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
-    # vec = jsp.linalg.solve_triangular(covar_module.k_nn, Y_data, lower=True)
-    # means = full_vectors@vec
     means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),Y_data)
 
     K_XX = _CovVector_Id(X, kernel, params)
     
-    def _contract(A, x):
-        vec = jsp.linalg.solve_triangular(A.T, x, lower=True)
-        return vec.T@vec
-    K_XNNX = vmap(_contract, in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
-    # K_XNNX = vmap(lambda A, x: x.T@jsp.linalg.cho_solve((A, False),x), in_axes=(None, 0))(covar_module.k_nn, full_vectors)     
+    K_XNNX = inner_map(covar_module.k_nn, full_vectors)       
     stds = jnp.sqrt(K_XX - K_XNNX)
     
     return means, stds
 
 def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
-    in the form of sparse_covmatrix and projected labels in the sparse (PPA) gpr model
+    in the form of sparse_covmatrix and FITC gpr model
 
     Parameters
     ----------
@@ -97,13 +88,8 @@ def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel
 
     K_XX = _CovVector_Id(X, kernel, params)
 
-    # TODO:
-    def _triangle_contract(A, x):
-        sol = jsp.linalg.solve_triangular(A.T,x, lower=True)
-        return sol.T@sol
-    triangle_contract = vmap(_triangle_contract, in_axes=(None, 0))
-    Q_XX = triangle_contract(covar_module.U_ref, ref_vectors)
-    K_XMMX = triangle_contract(covar_module.U_inv@covar_module.U_ref, ref_vectors)
+    Q_XX = inner_map(covar_module.U_ref, ref_vectors)
+    K_XMMX = inner_map(covar_module.U_inv@covar_module.U_ref, ref_vectors)
     
     stds = jnp.sqrt(K_XX - Q_XX + K_XMMX) 
     

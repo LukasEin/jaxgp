@@ -1,29 +1,50 @@
-from functools import partial
-
-from jax import jit, vmap
-from jax.numpy import ndarray, ravel, hstack
-from jax.scipy.linalg import solve
+import jax.scipy as jsp
+from jax import vmap
+from jax.numpy import hstack, ndarray, ravel
 
 from .kernels import BaseKernel
 
 
-@partial(vmap, in_axes=(None, 0))
-def _build_xT_Ainv_x(A: ndarray, X: ndarray) -> ndarray:
-    ''' Calculates X.T @ A_inv @ X for each of the M arrays in X
+def _matmul_diag(diagonal: ndarray, rhs: ndarray) -> ndarray:
+    '''Faster matrix multiplication for a diagonal matrix. 
 
     Parameters
     ----------
-    A : ndarray
-        positive definite matrix of shape (N, N)
-    X : ndarray
-        M arrays of shape (N, )
+    diagonal : ndarray
+        shape (N,). A diagonal matrix represented by a 1d vector
+    rhs : ndarray
+        shape (N, M). A generic matrix to be multiplied with a diagonal matrix from the left
 
     Returns
     -------
     ndarray
-        shape (M, ), [x.T @ A_inv @ x for x in X]
+        shape (N, M). Product matrix
     '''
-    return X.T@solve(A,X,assume_a="pos")
+    return diagonal*rhs
+
+matmul_diag = vmap(_matmul_diag, in_axes=(0,0))
+
+def _inner_map(lower_triangular: ndarray, rhs: ndarray) -> ndarray:
+    '''Use to calculate the inner product x.T @ A^-1 @ x were A is positive definite.
+    A must be given in its lower Cholesky decomposition L. 
+    The result is mapped over the second axis of x.
+
+    Parameters
+    ----------
+    lower_triangular : ndarray
+        shape (N, N). Lower triagular Cholesky decomposition of a pos def matrix.
+    rhs : ndarray
+        shape (N, M). Set of vectors over which the inner product is mapped
+
+    Returns
+    -------
+    ndarray
+        shape (M,). 
+    '''
+    sol = jsp.linalg.solve_triangular(lower_triangular.T,rhs, lower=True)
+    return sol.T@sol
+
+inner_map = vmap(_inner_map, in_axes=(None, 0))
 
 def _CovVector_Id(X: ndarray, kernel: BaseKernel, params: ndarray) -> ndarray:
     '''Calculates the covariance of each point in X with itself
