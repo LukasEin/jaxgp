@@ -97,6 +97,7 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
 
     # upper cholesky factor of K_ref || U_ref.T@U_ref = K_ref
     U_ref = jsp.linalg.cholesky(K_ref)
+    del K_ref
 
     # V is solution to U_ref.T@V = K_MN
     V = jsp.linalg.solve_triangular(U_ref.T, K_MN, lower=True)
@@ -109,6 +110,8 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
     Q_NN_diag = vmap(lambda x: x.T@x, in_axes=(1,))(V)    
     # diag(K_NN) + noise**2 - diag(Q_NN)
     fitc_diag = K_NN_diag + noise**2 - Q_NN_diag
+    del K_NN_diag
+    del Q_NN_diag
     
     def _mul_diag(diag, matrix):
         return diag*matrix
