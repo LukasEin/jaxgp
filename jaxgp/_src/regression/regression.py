@@ -129,7 +129,7 @@ class SparseGPR:
 
         solver = ScipyBoundedMinimize(fun=jit(likelihood.sparse_kernelNegativeLogLikelyhood), method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
-        print(result)
+        print(result.params, result.state.success)
         self.kernel_params = result.params
         if self.logger is not None:
             self.logger.write()
