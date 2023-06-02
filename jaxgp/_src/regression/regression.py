@@ -48,9 +48,6 @@ class ExactGPR:
             [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
         Y_data : ndarray
             shape (n_samples, ). labels corresponding to the elements in X_data
-        data_split : Tuple, optional
-            shape (1 + n_features, ) if X_data is ndarray, None if X_data is List[ndarray]
-            describes the how many of each type of evaluation in X_data are present.
         '''
         self.X_split = X_data
 
@@ -114,18 +111,14 @@ class SparseGPR:
 
         Parameters
         ----------
-        X_data : Union[ndarray, list[ndarray]]
+        X_data : Union[ndarray
             shape either (n_samples, n_features) or [(n_samples_1, n_features), ..., (n_samples_N, n_features)]
             sum(n_samples_i) = n_samples. If given in form List[ndarray] the order must be 
             [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
         Y_data : ndarray
             shape (n_samples, ). labels corresponding to the elements in X_data
-        data_split : Tuple, optional
-            shape (1 + n_features, ) if X_data is ndarray, None if X_data is List[ndarray]
-            describes the how many of each type of evaluation in X_data are present.
         '''
         self.X_split = X_data
-        self.Y_data = Y_data
 
         solver = ScipyBoundedMinimize(fun=jit(likelihood.sparse_kernelNegativeLogLikelyhood), method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
