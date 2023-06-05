@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Union
 
 import jax.numpy as jnp
 from jax.numpy import ndarray
@@ -31,18 +31,15 @@ def full_NLML(X_split: list[ndarray], Y_data: ndarray, kernel: BaseKernel, kerne
     float
         Negative log marginal likelihood for full GPR
     '''
-    # calculates the full covariance matrix
     covar_module = full_covariance_matrix(X_split, noise, kernel, kernel_params)
 
-    # calculates the logdet of the full covariance matrix
+    # logdet calculattion
     K_NN_diag = jnp.diag(covar_module.k_nn)
     logdet = 2*jnp.sum(jnp.log(K_NN_diag))
 
+    # Fit calculation
     fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
-    # vec = jsp.linalg.solve_triangular(covar_module.k_nn, Y_data, lower=True)
-    # fit = vec.T@vec
 
-    # calculates Y.T@C**(-1)@Y and adds logdet to get the final result
     nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
     
     return nlle / len(Y_data)
