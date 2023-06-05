@@ -9,6 +9,7 @@ from jaxopt import ScipyBoundedMinimize
 from .. import covar, likelihood, predict
 from ..kernels import BaseKernel
 from ..logger import Logger
+from .optim import optimize
 
 
 @dataclass
@@ -34,7 +35,8 @@ class ExactGPR:
     kernel: BaseKernel
     kernel_params: ndarray
     noise: Union[float, ndarray]
-    optimize_method:str = "L-BFGS-B"
+    optimize_noise: bool = False
+    optimize_method: str = "L-BFGS-B"
     logger: Logger = None
 
     def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
@@ -51,12 +53,21 @@ class ExactGPR:
         '''
         self.X_split = X_data
 
-        solver = ScipyBoundedMinimize(fun=jit(likelihood.full_kernelNegativeLogLikelyhood), method=self.optimize_method, callback=self.logger)
-        result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.noise, self.kernel)
-        print(result.params, result.state.success)
-        self.kernel_params = result.params
-        if self.logger is not None:
-            self.logger.write()
+        if self.optimize_noise:
+            def optim_fun(params):
+                kernel_params = params[0]
+                noise = params[1]
+                return likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, noise)
+        else:
+            def optim_fun(kernel_params):
+                return likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, self.noise)    
+
+        self.kernel_params = optimize(fun=optim_fun,
+                                      params=self.kernel_params,
+                                      bounds=(1e-3, jnp.inf),
+                                      method=self.optimize_method,
+                                      callback=self.logger,
+                                      jit_fun=True)
 
         self.covar_module = jit(covar.full_covariance_matrix)(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.Y_data = Y_data
@@ -103,6 +114,8 @@ class SparseGPR:
     kernel_params: ndarray
     noise: Union[float, ndarray]
     X_ref: ndarray
+    optimize_noise: bool = False
+    optimize_ref: bool = False
     optimize_method:str = "L-BFGS-B"
     logger: Logger = None
 
@@ -119,6 +132,54 @@ class SparseGPR:
             shape (n_samples, ). labels corresponding to the elements in X_data
         '''
         self.X_split = X_data
+
+        if self.optimize_noise and self.optimize_ref:
+            def optim_fun(params):
+                kernel_params = params[0]
+                noise = params[1]
+                X_ref = params[2]
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, X_ref, kernel_params, noise)
+            
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.X_ref)*(-jnp.inf))
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.X_ref)*jnp.inf)
+
+            bounds = (lb, ub)
+
+            init_params = (self.kernel_params, self.noise, self.X_ref)
+        elif self.optimize_ref:
+            def optim_fun(params):
+                kernel_params = params[0]
+                X_ref = params[1]
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, X_ref, kernel_params, self.noise)
+            
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.X_ref)*(-jnp.inf))
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.X_ref)*jnp.inf)
+
+            bounds = (lb, ub)
+        elif self.optimize_noise:
+            def optim_fun(params):
+                kernel_params = params[0]
+                noise = params[1]
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, self.X_ref, kernel_params, noise)
+            
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
+
+            bounds = (lb, ub)
+        else:
+            def optim_fun(params):
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, self.X_ref, params, self.noise)
+
+            bounds = (1e-3, jnp.inf)  
+
+        self.kernel_params = optimize(fun=optim_fun,
+                                      params=self.kernel_params,
+                                      bounds=bounds,
+                                      method=self.optimize_method,
+                                      callback=self.logger,
+                                      jit_fun=True)
+
+
 
         solver = ScipyBoundedMinimize(fun=jit(likelihood.sparse_kernelNegativeLogLikelyhood), method=self.optimize_method, callback=self.logger)
         result = solver.run(self.kernel_params, (1e-3,jnp.inf), self.X_split, Y_data, self.X_ref, self.noise, self.kernel)
