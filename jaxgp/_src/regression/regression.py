@@ -73,12 +73,17 @@ class ExactGPR:
 
             init_params = self.kernel_params  
 
-        self.kernel_params = optimize(fun=optim_fun,
-                                      params=init_params,
-                                      bounds=bounds,
-                                      method=self.optimize_method,
-                                      callback=self.logger,
-                                      jit_fun=True)
+        optimized_params = optimize(fun=optim_fun,
+                                    params=init_params,
+                                    bounds=bounds,
+                                    method=self.optimize_method,
+                                    callback=self.logger,
+                                    jit_fun=True)
+        
+        if self.optimize_noise:
+            self.kernel_params, self.noise = optimized_params
+        else:
+            self.kernel_params = optimized_params
 
         self.covar_module = jit(covar.full_covariance_matrix)(self.X_split, self.noise, self.kernel, self.kernel_params)
         self.Y_data = Y_data
@@ -189,12 +194,21 @@ class SparseGPR:
 
             init_params = self.kernel_params
 
-        self.kernel_params = optimize(fun=optim_fun,
-                                      params=init_params,
-                                      bounds=bounds,
-                                      method=self.optimize_method,
-                                      callback=self.logger,
-                                      jit_fun=True)
+        optimized_params = optimize(fun=optim_fun,
+                                    params=init_params,
+                                    bounds=bounds,
+                                    method=self.optimize_method,
+                                    callback=self.logger,
+                                    jit_fun=True)
+        
+        if self.optimize_noise and self.optimize_ref:
+            self.kernel_params, self.noise, self.X_ref = optimized_params
+        elif self.optimize_ref:
+            self.kernel_params, self.X_ref = optimized_params
+        elif self.optimize_noise:
+            self.kernel_params, self.noise = optimized_params
+        else:
+            self.kernel_params = optimized_params
 
         self.covar_module = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
 
