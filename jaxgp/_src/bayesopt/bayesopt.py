@@ -4,57 +4,61 @@ from typing import Callable, Tuple, Union
 import jax
 import jax.numpy as jnp
 from jax.numpy import ndarray
-from jaxopt import ScipyBoundedMinimize
 
-from ..covar import full_covariance_matrix, full_covariance_matrix_nograd
 from ..kernels import BaseKernel
-from ..likelihood import full_kernelNegativeLogLikelyhood
+from ..covar import FullCovar, SparseCovar
+from ..utils import *
 
 
-def _bayesoptstep(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarray], init_params: ndarray, kernel: BaseKernel, 
-                  noise: Union[float, ndarray], optimize_method: str, acquisition_func: Callable, *args) -> ndarray:
-    '''_summary_
+def _step_full_grad(covar_module: FullCovar, acqui_fun, X_split, Y_data, kernel, kernel_params):
+    # Find new best point
+    X_next, Y_next = acqui_fun()
 
-    Parameters
-    ----------
-    X_split : Tuple(ndarray, ndarray)
-        _description_
-    Y_data : Tuple(ndarray, ndarray)
-        _description_
-    init_params : ndarray
-        _description_
-    kernel : BaseKernel
-        _description_
-    noise : Union[float, ndarray]
-        _description_
-    optimize_method : str
-        _description_
-    acquisition_func : Callable
-        A function that takes the model as input and return the "best" next point to add to the model, i.e.
-        model -> (X_next, Y_next / grad(Y_next), isgrad)
-    args : Any
-        Additional arguments for acquisition_func
+    # update covariance matrix
+    cov_self = CovMatrixDD(X_next, X_next, kernel, kernel_params)
 
-    Returns
-    -------
-    ndarray
-        _description_
-    '''
-    # solver = ScipyBoundedMinimize(fun=full_kernelNegativeLogLikelyhood, method=optimize_method)
-    # result = solver.run(init_params, (1e-3,jnp.inf), X_split, jnp.vstack(Y_data), noise, kernel)
+    cov_grad = CovMatrixDD(X_split[1], X_next, kernel, kernel_params)
+    cov_fun = CovMatrixFD(X_split[0], X_next, kernel, kernel_params)
+    cov_other = jnp.vstack((cov_fun, cov_grad))
 
-    # cov_matrix = full_covariance_matrix_nograd(X_split[1], noise, kernel, result.params)
+    cov = jnp.vstack((jnp.hstack((covar_module.k_nn, cov_other)),
+                      jnp.hstack((cov_other.T, cov_self))))
 
-    X_next, Y_next, isgrad = acquisition_func(X_split, Y_data, init_params, kernel, noise, optimize_method, *args)
+    # update data
+    X_next = (X_split[0], jnp.vstack((X_split[1], X_next)))
+    Y_next = (Y_data[0], jnp.vstack((Y_data[1], Y_next)))
 
-    if isgrad:
-        X_next = (X_split[0], jnp.vstack((X_split[1], X_next)))
-        Y_next = (Y_data[0], jnp.vstack((Y_data[1], Y_next)))
-    else:
-        X_next = (jnp.vstack((X_split[0], X_next)), X_split[1])
-        Y_next = (jnp.vstack((Y_data[0], Y_next)), Y_data[1])
-        
-    return (X_next, Y_next)
+    return FullCovar(cov), X_next, Y_next
+
+def _step_full_fun(covar_module: FullCovar, acqui_fun, X_split, Y_data, kernel, kernel_params):
+    # Find new best point
+    X_next, Y_next = acqui_fun()
+
+    # update covariance matrix
+    cov_self = CovMatrixFF(X_next, X_next, kernel, kernel_params)
+
+    cov_grad = CovMatrixFD(X_next, X_split[1], kernel, kernel_params)
+    cov_fun = CovMatrixFF(X_next, X_split[0], kernel, kernel_params)
+    cov_other = jnp.hstack((cov_fun, cov_grad))
+
+    cov = jnp.vstack((jnp.hstack((cov_self, cov_other)),
+                      jnp.hstack((cov_other.T, covar_module.k_nn))))
+
+    # update data
+    X_next = (jnp.vstack((X_split[0], X_next)), X_split[1])
+    Y_next = (jnp.vstack((Y_data[0], Y_next)), Y_data[1])
+
+    return FullCovar(cov), X_next, Y_next
+
+def _for_loop(lb, ub, init_val, body_fun):
+    val = init_val
+
+    for i in range(lb, ub):
+        val = body_fun(i, val)
+
+    return val
+
+for_loop = jax.jit(_for_loop, static_argnums=(0,1,3))
 
 @dataclass   
 class BayesOpt:
