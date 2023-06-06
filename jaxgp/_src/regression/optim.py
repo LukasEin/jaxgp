@@ -10,7 +10,7 @@ def optimize(fun, params, bounds, method, callback=None, jit_fun=True, *args):
     solver = ScipyBoundedMinimize(fun=opt_fun, method=method, callback=callback)
     result = solver.run(params, bounds, *args)
 
-    print(result.params, result.state.success)
+    print(result.state.success)
     if callback is not None:
         callback.write()
 
