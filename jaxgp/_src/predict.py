@@ -4,9 +4,9 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax.numpy import ndarray
 
-from .covar import FullCovar, SparseCovar
+from .covar import FullCovar, SparseCovar, CovMatrixFD, CovMatrixFF, CovVectorID 
 from .kernels import BaseKernel
-from .utils import CovMatrixFD, CovMatrixFF, _CovVector_Id, inner_map
+from .utils import inner_map
 
 
 def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
@@ -43,7 +43,7 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
 
     means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),Y_data)
 
-    K_XX = _CovVector_Id(X, kernel, params)
+    K_XX = CovVectorID(X, kernel, params)
     
     K_XNNX = inner_map(covar_module.k_nn, full_vectors)       
     stds = jnp.sqrt(K_XX - K_XNNX)
@@ -86,7 +86,7 @@ def sparse_predict(X: ndarray, covar_module: SparseCovar, X_ref: ndarray, kernel
 
     means = means_left.T@covar_module.proj_labs
 
-    K_XX = _CovVector_Id(X, kernel, params)
+    K_XX = CovVectorID(X, kernel, params)
 
     Q_XX = inner_map(covar_module.U_ref, ref_vectors)
     K_XMMX = inner_map(covar_module.U_inv@covar_module.U_ref, ref_vectors)
