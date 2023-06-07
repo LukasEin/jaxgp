@@ -17,8 +17,9 @@ class SparseCovar(NamedTuple):
 
 class FullCovar(NamedTuple):
     k_nn: ndarray
+    y_data: ndarray
 
-def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> FullCovar:
+def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> FullCovar:
     '''Calculates the full covariance matrix over the input samples in X_split.
 
     Parameters
@@ -52,7 +53,7 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], noise: Union[float,
     K_NN = K_NN.at[diag].add(noise**2)
 
     K_NN = jsp.linalg.cholesky(K_NN)
-    return FullCovar(K_NN)
+    return FullCovar(K_NN, Y_data)
 
 def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, noise: Union[float, ndarray], kernel: BaseKernel, params: ndarray) -> SparseCovar:
     '''Calculates the sparse covariance matrix over the input samples in X_split 

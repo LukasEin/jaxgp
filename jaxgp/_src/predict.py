@@ -9,7 +9,7 @@ from .kernels import BaseKernel
 from .utils import inner_map
 
 
-def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
+def full_predict(X: ndarray, covar_module: FullCovar, X_split: ndarray, kernel: BaseKernel, params: ndarray) -> Tuple[ndarray, ndarray]:
     '''Calculates the posterior mean and std for each point in X given prior information 
     in the form of full_covmatrix and Y_data for the full gpr model
 
@@ -41,7 +41,7 @@ def full_predict(X: ndarray, covar_module: FullCovar, Y_data: ndarray, X_split: 
     derivative_vectors = CovMatrixFD(X, X_split[1], kernel, params)
     full_vectors = jnp.hstack((function_vectors, derivative_vectors))
 
-    means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),Y_data)
+    means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),covar_module.y_data)
 
     K_XX = CovVectorID(X, kernel, params)
     

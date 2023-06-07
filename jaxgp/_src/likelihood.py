@@ -31,7 +31,7 @@ def full_NLML(X_split: list[ndarray], Y_data: ndarray, kernel: BaseKernel, kerne
     float
         Negative log marginal likelihood for full GPR
     '''
-    covar_module = full_covariance_matrix(X_split, noise, kernel, kernel_params)
+    covar_module = full_covariance_matrix(X_split, Y_data, noise, kernel, kernel_params)
 
     # logdet calculattion
     K_NN_diag = jnp.diag(covar_module.k_nn)
