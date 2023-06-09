@@ -30,12 +30,13 @@ def make_dict(num_f_vals, num_d_vals, optimizer, fun, eval_grid, predictions, st
             "true_in_confs": jnp.array(true_in_confs)}
     
     mses = {"mean_mse": jnp.mean(temp["mses"]), 
-         "max_mse": jnp.max(temp["mses"]),
-         "min_mse": jnp.min(temp["mses"])}
+            "median_mse": jnp.median(temp["mses"]),
+            "max_mse": jnp.max(temp["mses"]),
+             "min_mse": jnp.min(temp["mses"])}
     
     confs = {"mean_tic": jnp.mean(temp["true_in_confs"]), 
-         "max_tic": jnp.max(temp["true_in_confs"]),
-         "min_tic": jnp.min(temp["true_in_confs"])}
+             "max_tic": jnp.max(temp["true_in_confs"]),
+             "min_tic": jnp.min(temp["true_in_confs"])}
     
     return {**temp, **mses, **confs}
 

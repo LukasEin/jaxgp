@@ -11,33 +11,28 @@ from dataclasses import dataclass
 
 @dataclass
 class UpperConfidenceBound:
-    bounds: Tuple
-    num: float
+    grid: ndarray
     explore: float
 
     def __call__(self, gpr: ExactGPR, logger) -> ndarray:
-        grid = jnp.linspace(self.bounds[0], self.bounds[1], self.num)
-        mean, std = full_predict(grid, gpr.covar_module, gpr.X_split, gpr.kernel, gpr.kernel_params)
+        mean, std = full_predict(self.grid, gpr.covar_module, gpr.X_split, gpr.kernel, gpr.kernel_params)
 
         ucb = mean + self.explore*std
 
         next_arg = jnp.argmax((ucb).reshape(-1))
-        x_next = grid[next_arg].reshape(1,-1)
+        x_next = self.grid[next_arg].reshape(1,-1)
 
         return x_next
     
 @dataclass
 class MaximumVariance:
-    bounds: Tuple
-    num: float
+    grid: ndarray
 
     def __call__(self, gpr: ExactGPR, logger) -> ndarray:
-        grid = jnp.linspace(self.bounds[0], self.bounds[1], self.num)
-        _, std = full_predict(grid, gpr.covar_module, gpr.X_split, gpr.kernel, gpr.kernel_params)
-
+        _, std = full_predict(self.grid, gpr.covar_module, gpr.X_split, gpr.kernel, gpr.kernel_params)
 
         next_arg = jnp.argmax((std).reshape(-1))
-        x_next = grid[next_arg].reshape(1,-1)
+        x_next = self.grid[next_arg].reshape(1,-1)
 
         return x_next
 
