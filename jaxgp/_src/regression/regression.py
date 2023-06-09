@@ -157,7 +157,7 @@ class SparseGPR:
     X_ref: ndarray
     optimize_noise: bool = False
     optimize_ref: bool = False
-    optimize_method:str = "L-BFGS-B"
+    optimize_method: int = 0
     logger: Logger = None
 
     def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
