@@ -1,7 +1,7 @@
 from jaxopt import ScipyBoundedMinimize
 from jax import jit
 
-optimizers = ("L-BFGS-B", "TNC", "SLSQP")
+optimizers = ("SLSQP", "L-BFGS-B", "TNC")
 
 def optimize(fun, params, bounds, method, callback=None, jit_fun=True, *args):
     if jit_fun:

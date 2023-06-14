@@ -157,6 +157,7 @@ class SparseGPR:
     X_ref: ndarray
     optimize_noise: bool = False
     optimize_ref: bool = False
+    ref_bounds: Tuple = (-jnp.inf, jnp.inf)
     optimize_method: int = 0
     logger: Logger = None
 
@@ -181,8 +182,8 @@ class SparseGPR:
                 X_ref = params[2]
                 return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, X_ref, kernel_params, noise)
             
-            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.X_ref)*(-jnp.inf))
-            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.X_ref)*jnp.inf)
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.X_ref)*(self.ref_bounds[0]))
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.X_ref)*(self.ref_bounds[1]))
 
             bounds = (lb, ub)
 
