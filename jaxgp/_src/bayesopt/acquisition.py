@@ -35,6 +35,12 @@ class MaximumVariance:
         x_next = self.grid[next_arg].reshape(1,-1)
 
         return x_next
+    
+@dataclass
+class ExpectedVarianceImprovement:
+    pass
+    # 1) find point that currently has maximum variance
+    # 2) add random initial point to cov matrix
 
 # def upper_confidence_bound(cov_matrix, Y_data, X_split, kernel, params, bounds, eval_function):
 #     def minim_func(x):
