@@ -38,7 +38,17 @@ def make_dict(num_f_vals, num_d_vals, optimizer, fun, eval_grid, predictions, st
              "max_tic": jnp.max(temp["true_in_confs"]),
              "min_tic": jnp.min(temp["true_in_confs"])}
     
-    return {**temp, **mses, **confs}
+    stds =  {"mean_maxstds": jnp.mean(temp["maxstds"]), 
+            "median_maxstds": jnp.median(temp["maxstds"]),
+            "max_maxstds": jnp.max(temp["maxstds"]),
+            "min_maxstds": jnp.min(temp["maxstds"])}
+    
+    errs =  {"mean_maxerrs": jnp.mean(temp["maxerrs"]), 
+            "median_maxerrs": jnp.median(temp["maxerrs"]),
+            "max_maxerrs": jnp.max(temp["maxerrs"]),
+            "min_maxerrs": jnp.min(temp["maxerrs"])}
+    
+    return {**temp, **mses, **confs, **stds, **errs}
 
 def make_dict_all(num_vals, optimizer, fun, eval_grid, predictions, stds):
     Y = fun(eval_grid)
@@ -61,7 +71,11 @@ def make_dict_all(num_vals, optimizer, fun, eval_grid, predictions, stds):
          "max_tic": jnp.max(temp["true_in_confs"]),
          "min_tic": jnp.min(temp["true_in_confs"])}
     
-    return {**temp, **mses, **confs}
+    stds =  {"mean_maxstds": jnp.mean(temp["maxstds"]), 
+         "max_maxstds": jnp.max(temp["maxstds"]),
+         "min_maxstds": jnp.min(temp["maxstds"])}
+    
+    return {**temp, **mses, **confs, **stds}
 
 def make_df(list_f_vals, list_d_vals, optimizers, in_dir, name, sparse, subset_size, fun, eval_grid):
     in_list = []
