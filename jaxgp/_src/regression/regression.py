@@ -4,40 +4,39 @@ from typing import Tuple, Union
 import jax.numpy as jnp
 from jax import jit
 from jax.numpy import ndarray
-from jaxopt import ScipyBoundedMinimize
 from jax.tree_util import register_pytree_node_class
 
 from .. import covar, likelihood, predict
 from ..kernels import BaseKernel
 from ..logger import Logger
-from .optim import optimize
+from .optim import optimize, Optimizer
 
 @register_pytree_node_class
 @dataclass
 class ExactGPR:
-    '''A full Gaussian Process regressor model
+    '''A full Gaussian Process regressor model.
 
     Parameters
     ----------
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    init_kernel_params : ndarray
+    kernel_params : Union[float, ndarray], optional
         initial kernel parameters for the optimization
-    noise : Union[float, ndarray]
-        noise present in the input labels
-        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
-        Else each value is added to the corresponding diagonal block coming from X_split
-    optimize_method : str, optional
-        method to use in the optimizing process of the model parameters
+    noise : float, optional
+        describes the noise present in the given input labels. Defaults to 1e-4
+        If optimize_noise=True then this is taken as an initial parameter and optimized
+    optimize_noise : bool, optional
+        flag if noise parameter should also be optimized
+    optimize_method : Optimizer, optional
+        method to use in the optimizing process of the model parameters. By default the SLSQP method is used
     logger : Logger, optional
-        If given must be a class with a __call__ method and a write method, by default None
-        Logs the results of the optimization procedure.
+        If a Logger instance is given logs the results of the optimization procedure.
     '''
     kernel: BaseKernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
-    noise: Union[float, ndarray] = jnp.log(2)
-    optimize_noise: bool = True
-    optimize_method: int = 0
+    noise: float = 1e-4
+    optimize_noise: bool = False
+    optimize_method: Optimizer = Optimizer.SLSQP
     logger: Logger = None
 
     def __post_init__(self) -> None:
@@ -52,12 +51,10 @@ class ExactGPR:
 
         Parameters
         ----------
-        X_data : Union[ndarray, list[ndarray]]
-            shape either (n_samples, n_features) or [(n_samples_1, n_features), ..., (n_samples_N, n_features)]
-            sum(n_samples_i) = n_samples. If given in form List[ndarray] the order must be 
-            [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
+        X_data : Tuple[ndarray, ndarray]
+            Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
         Y_data : ndarray
-            shape (n_samples, ). labels corresponding to the elements in X_data
+            shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
         '''
         self.X_split = X_data
 
@@ -93,7 +90,7 @@ class ExactGPR:
         else:
             self.kernel_params = optimized_params
 
-        self.covar_module = jit(covar.full_covariance_matrix)(self.X_split, Y_data, self.noise, self.kernel, self.kernel_params)
+        self.covar_module = jit(covar.full_covariance_matrix)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -101,12 +98,12 @@ class ExactGPR:
         Parameters
         ----------
         X : ndarray
-            shape (N, n_features). Set of points for which to calculate the posterior means and stds
+            shape (N, n_dims). Set of points for which to calculate the posterior means and stds
 
         Returns
         -------
-        Tuple[ndarray, ndarray]
-            Posterior means and stds
+        Posterior
+            Posterior means and stds, [mean(x), std(x) for x in X]
         '''
         return jit(predict.full_predict)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
 
@@ -130,48 +127,56 @@ class ExactGPR:
     
 @dataclass    
 class SparseGPR:
-    '''a sparse (PPA) Gaussian Process Regressor model.
-    The full gaussian process is projected into a smaller subspace for computational efficiency
-    
+    '''a sparse (FITC) Gaussian Process Regressor model.
+
     Parameters
     ----------
+    X_ref : ndarray
+        shape (n_referencepoints, n_dims). Reference points onto which the whole input dataset is projected.
     kernel : derived class from BaseKernel
         Kernel that describes the covariance between input points.
-    init_kernel_params : ndarray
+    kernel_params : Union[float, ndarray], optional
         initial kernel parameters for the optimization
-    noise : Union[float, ndarray]
-        noise present in the input labels
-        either scalar or ndarray of shape (len(X_split),). If scalar, the same value is added along the diagonal. 
-        Else each value is added to the corresponding diagonal block coming from X_split
-    X_ref : ndarray
-        shape (n_referencepoints, n_features). Reference points onto which the gaussian process is projected.
-    optimize_method : str, optional
-        method to use in the optimizing process of the model parameters
+    noise : float, optional
+        describes the noise present in the given input labels. Defaults to 1e-4
+        If optimize_noise=True then this is taken as an initial parameter and optimized
+    optimize_noise : bool, optional
+        flag if noise parameter should also be optimized
+    optimize_ref : bool, optional
+        flag if the positions of X_ref should be optimized
+    ref_bounds : Tuple, optional
+        Boundaries used for optimization of the reference positions, per default no bounds
+    optimize_method : Optimizer, optional
+        method to use in the optimizing process of the model parameters. By default the SLSQP method is used
     logger : Logger, optional
-        If given must be a class with a __call__ method and a write method, by default None
-        Logs the results of the optimization procedure.
+        If a Logger instance is given logs the results of the optimization procedure.
     '''
-    kernel: BaseKernel
-    kernel_params: ndarray
-    noise: Union[float, ndarray]
     X_ref: ndarray
+    kernel: BaseKernel
+    kernel_params: Union[float, ndarray] = jnp.log(2)
+    noise: float = 1e-4
     optimize_noise: bool = False
     optimize_ref: bool = False
     ref_bounds: Tuple = (-jnp.inf, jnp.inf)
-    optimize_method: int = 0
+    optimize_method: Optimizer = Optimizer.SLSQP
     logger: Logger = None
 
+    def __post_init__(self) -> None:
+        if jnp.isscalar(self.kernel_params):
+            self.kernel_params = jnp.ones(self.kernel.num_params)*self.kernel_params
+
+        self.X_split = None
+        self.covar_module = None
+
     def train(self, X_data: Tuple[ndarray, ndarray], Y_data: ndarray) -> None:
-        '''Fits a sparse (PPA) gaussian process to the input data by optimizing the parameters of the model.
+        '''Fits a sparse (FITC) gaussian process to the input data by optimizing the parameters of the model.
 
         Parameters
         ----------
-        X_data : Union[ndarray
-            shape either (n_samples, n_features) or [(n_samples_1, n_features), ..., (n_samples_N, n_features)]
-            sum(n_samples_i) = n_samples. If given in form List[ndarray] the order must be 
-            [function evals, derivative w.r.t. first feature, ..., derivative w.r.t. last feature]
+        X_data : Tuple[ndarray, ndarray]
+            Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
         Y_data : ndarray
-            shape (n_samples, ). labels corresponding to the elements in X_data
+            shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
         '''
         self.X_split = X_data
 
@@ -180,7 +185,7 @@ class SparseGPR:
                 kernel_params = params[0]
                 noise = params[1]
                 X_ref = params[2]
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, X_ref, kernel_params, noise)
+                return likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.X_ref)*(self.ref_bounds[0]))
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.X_ref)*(self.ref_bounds[1]))
@@ -192,7 +197,7 @@ class SparseGPR:
             def optim_fun(params):
                 kernel_params = params[0]
                 X_ref = params[1]
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, X_ref, kernel_params, self.noise)
+                return likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, self.noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.X_ref)*(-jnp.inf))
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.X_ref)*jnp.inf)
@@ -204,7 +209,7 @@ class SparseGPR:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, self.X_ref, kernel_params, noise)
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, kernel_params, noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
@@ -214,7 +219,7 @@ class SparseGPR:
             init_params = (self.kernel_params, self.noise)
         else:
             def optim_fun(params):
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.kernel, self.X_ref, params, self.noise)
+                return likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, params, self.noise)
 
             bounds = (1e-3, jnp.inf)  
 
@@ -236,7 +241,7 @@ class SparseGPR:
         else:
             self.kernel_params = optimized_params
 
-        self.covar_module = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.noise, self.kernel, self.kernel_params)
+        self.covar_module = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.kernel, self.kernel_params, self.noise)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -248,7 +253,7 @@ class SparseGPR:
 
         Returns
         -------
-        Tuple[ndarray, ndarray]
-            Posterior means and stds
+        Posterior
+            Posterior means and stds, [mean(x), std(x) for x in X]
         '''
         return jit(predict.sparse_predict)(X, self.covar_module, self.X_ref, self.kernel, self.kernel_params)

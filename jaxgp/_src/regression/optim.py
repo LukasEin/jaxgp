@@ -1,15 +1,23 @@
-from jaxopt import ScipyBoundedMinimize
+from enum import Enum
+
 from jax import jit
+from jaxopt import ScipyBoundedMinimize
 
-optimizers = ("SLSQP", "L-BFGS-B", "TNC")
 
-def optimize(fun, params, bounds, method, callback=None, jit_fun=True, *args):
+class Optimizer(Enum):
+    SLSQP = 0
+    TNC = 1
+    LBFGSB = 2
+
+optimizers = ("SLSQP", "TNC", "L-BFGS-B")
+
+def optimize(fun, params, bounds, method: Optimizer, callback=None, jit_fun=True, *args):
     if jit_fun:
         opt_fun = jit(fun)
     else:
         opt_fun = fun
 
-    solver = ScipyBoundedMinimize(fun=opt_fun, method=optimizers[method], callback=callback)
+    solver = ScipyBoundedMinimize(fun=opt_fun, method=optimizers[method.value], callback=callback)
     result = solver.run(params, bounds, *args)
 
     print(result.state.success)
