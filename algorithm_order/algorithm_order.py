@@ -59,8 +59,8 @@ def full_timing(start, stop, step):
         def test():
             X = jit(full_covariance_matrix)(X_train, Y_train, KERNEL, KERNEL_PARAMS, NOISE)
 
-
         times.append(repeat(test, number=10)[1:])
+
     times = jnp.array(times)
     avg_times = jnp.mean(times, axis=1)
     jnp.save(f"full_time_{start}_{stop}_{step}", avg_times)
@@ -70,14 +70,33 @@ def sparse_timing_fixed_percent(start, stop, step, percent):
 
     for i in range(start, stop, step):
         X_train, Y_train = _train_data(i)
-        num_ref_points = int(len(X_train[0]) + len(X_train[1])) + 1
+        num_ref_points = int((len(X_train[0]) + len(X_train[1]))*percent) + 1
         X_ref = ref_from_data(X_train, num_ref_points)
 
         def test():
             X = jit(sparse_covariance_matrix)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
 
-
         times.append(repeat(test, number=10)[1:])
+
     times = jnp.array(times)
     avg_times = jnp.mean(times, axis=1)
     jnp.save(f"sparse_time_{start}_{stop}_{step}", avg_times)
+
+def sparse_timing_fixed_max(num_data):
+    X_train, Y_train = _train_data(num_data)
+    times = []
+
+    percentages = jnp.linspace(0,1,50)
+
+    for percent in percentages:
+        num_ref_points = int((len(X_train[0]) + len(X_train[1]))*percent) + 1
+        X_ref = ref_from_data(X_train, num_ref_points)
+
+        def test():
+            X = jit(sparse_covariance_matrix)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
+
+        times.append(repeat(test, number=10)[1:])
+
+    times = jnp.array(times)
+    avg_times = jnp.mean(times, axis=1)
+    jnp.save(f"sparse_time_{num_data}", avg_times)
