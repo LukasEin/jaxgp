@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 import jax.numpy as jnp
@@ -8,7 +9,7 @@ from jax.tree_util import register_pytree_node_class
 
 @register_pytree_node_class
 @dataclass
-class BaseKernel:
+class Kernel(ABC):
     '''Kernel base-class. Defines the needed derivatives of a kernel based 
     on the eval method. In each derived class the eval method must be overwritten.
     
@@ -18,30 +19,9 @@ class BaseKernel:
     '''
     num_params: int = 2
     
+    @abstractmethod
     def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
-        '''Kernel evaluation at points x1 and x2.
-
-        Parameters
-        ----------
-        x1 : ndarray
-            shape (n_features, ). Corresponds to a function evaluation.
-        x2 : ndarray
-            shape (n_features, ). Corresponds to a function evaluation.
-        params : ndarray
-            kernel_parameters
-
-        Returns
-        -------
-        ndarray
-            shape ()
-            Scalar value that describes the kernel evaluation at points x1 and x2.
-
-        Raises
-        ------
-        NotImplementedError
-            This method must be overwritten in all derived classes.
-        '''
-        raise NotImplementedError("Class deriving from BaseKernel has not implemented the method eval!")
+        pass
     
     def grad2(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''gradient of the kernel w.r.t. x2
@@ -103,7 +83,7 @@ class BaseKernel:
 
 @register_pytree_node_class
 @dataclass
-class RBF(BaseKernel):
+class RBF(Kernel):
     '''Kernel based on radial basis function / gaussian
 
     Parameters
@@ -142,7 +122,7 @@ class RBF(BaseKernel):
 
 @register_pytree_node_class  
 @dataclass  
-class Linear(BaseKernel):
+class Linear(Kernel):
     '''kernel based on the dot-product of the two input vectors
 
     Parameters
@@ -180,7 +160,7 @@ class Linear(BaseKernel):
     
 @register_pytree_node_class
 @dataclass  
-class Periodic(BaseKernel):
+class Periodic(Kernel):
     '''Kernel based on radial basis function / gaussian
     
     Parameters
@@ -219,11 +199,11 @@ class Periodic(BaseKernel):
 
 @register_pytree_node_class
 @dataclass  
-class SumKernel(BaseKernel):
+class SumKernel(Kernel):
     '''A wrapper that supplies the summing of two kernels
     '''
-    left_kernel: BaseKernel
-    right_kernel: BaseKernel
+    left_kernel: Kernel
+    right_kernel: Kernel
     num_params: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -264,11 +244,11 @@ class SumKernel(BaseKernel):
 
 @register_pytree_node_class
 @dataclass  
-class ProductKernel(BaseKernel):
+class ProductKernel(Kernel):
     '''a wrapper that supplies multiplying two kernels
     '''
-    left_kernel: BaseKernel
-    right_kernel: BaseKernel
+    left_kernel: Kernel
+    right_kernel: Kernel
     num_params: int = field(init=False)
 
     def __post_init__(self) -> None:

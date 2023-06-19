@@ -58,7 +58,7 @@ class ExpectedVarianceImprovement:
 
 #     return X_next, Y_next.reshape(-1), isgrad
 
-# def maximum_confidence_grad(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarray], init_params: ndarray, kernel: BaseKernel, 
+# def maximum_confidence_grad(X_split: Tuple[ndarray, ndarray], Y_data: Tuple[ndarray, ndarray], init_params: ndarray, kernel: Kernel, 
 #                   noise: Union[float, ndarray], optimize_method: str, acquisition_func: Callable, grid: ndarray, eval_function) -> Tuple[ndarray, ndarray, bool]:
 #     '''_summary_
 
@@ -70,7 +70,7 @@ class ExpectedVarianceImprovement:
 #         _description_
 #     X_split : Tuple[ndarray, ndarray]
 #         _description_
-#     kernel : BaseKernel
+#     kernel : Kernel
 #         _description_
 #     kernel_params : ndarray
 #         _description_

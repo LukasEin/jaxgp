@@ -7,7 +7,7 @@ from jax.numpy import ndarray
 from jax.tree_util import register_pytree_node_class
 
 from .. import covar, likelihood, predict
-from ..kernels import BaseKernel
+from ..kernels import Kernel
 from ..logger import Logger
 from .optim import optimize, Optimizer
 
@@ -18,7 +18,7 @@ class ExactGPR:
 
     Parameters
     ----------
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : Union[float, ndarray], optional
         initial kernel parameters for the optimization
@@ -32,7 +32,7 @@ class ExactGPR:
     logger : Logger, optional
         If a Logger instance is given logs the results of the optimization procedure.
     '''
-    kernel: BaseKernel
+    kernel: Kernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
     noise: float = 1e-4
     optimize_noise: bool = False
@@ -133,7 +133,7 @@ class SparseGPR:
     ----------
     X_ref : ndarray
         shape (n_referencepoints, n_dims). Reference points onto which the whole input dataset is projected.
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : Union[float, ndarray], optional
         initial kernel parameters for the optimization
@@ -152,7 +152,7 @@ class SparseGPR:
         If a Logger instance is given logs the results of the optimization procedure.
     '''
     X_ref: ndarray
-    kernel: BaseKernel
+    kernel: Kernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
     noise: float = 1e-4
     optimize_noise: bool = False

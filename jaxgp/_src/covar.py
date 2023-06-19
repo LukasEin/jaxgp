@@ -5,11 +5,11 @@ import jax.scipy as jsp
 from jax import vmap
 from jax.numpy import ndarray
 
-from .kernels import BaseKernel
+from .kernels import Kernel
 from .utils import matmul_diag
 from .containers import FullPrior, SparsePrior 
 
-def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: BaseKernel, kernel_params: ndarray, noise: float) -> FullPrior:
+def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> FullPrior:
     '''Calculates the full gaussian prior over the input samples in X_split.
 
     Parameters
@@ -18,7 +18,7 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, ke
         Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
     Y_data : ndarray
         shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -45,7 +45,7 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, ke
     K_NN = jsp.linalg.cholesky(K_NN)
     return FullPrior(K_NN, Y_data)
 
-def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: BaseKernel, kernel_params: ndarray, noise: float) -> SparsePrior:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> SparsePrior:
     '''Calculates the sparse gaussian prior over the input samples in X_split, projected onto the reference points X_ref.
 
     Parameters
@@ -56,7 +56,7 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
         shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
     X_ref : ndarray
         shape (n_referencepoints, n_dims). Reference points onto which the whole input dataset is projected.
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -105,14 +105,14 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
 
     return SparsePrior(U_ref, U_inv, fitc_diag, projected_label)
 
-def CovVectorID(X: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> ndarray:
+def CovVectorID(X: ndarray, kernel: Kernel, kernel_params: ndarray) -> ndarray:
     '''Calculates the covariance of each point in X with itself
 
     Parameters
     ----------
     X : ndarray
         array of shape (N, n_features)
-    kernel : derived class of BaseKernel
+    kernel : derived class of Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -126,7 +126,7 @@ def CovVectorID(X: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> ndarr
     func = vmap(func, in_axes=(0))
     return func(X)
 
-def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> ndarray:
+def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: Kernel, kernel_params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on inputs representing values of the target function.
 
@@ -136,7 +136,7 @@ def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: nda
         shape (N1, n_features)
     X2 : ndarray
         shape (N2, n_features)
-    kernel : derived class of BaseKernel
+    kernel : derived class of Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -150,7 +150,7 @@ def CovMatrixFF(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: nda
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return func(X1, X2)
 
-def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> ndarray:
+def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: Kernel, kernel_params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 representing values of the target function and X2
     representing gradient values of the target function.
@@ -161,7 +161,7 @@ def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: nda
         shape (N1, n_features)
     X2 : ndarray
         shape (N2, n_features)
-    kernel : derived class of BaseKernel
+    kernel : derived class of Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -175,7 +175,7 @@ def CovMatrixFD(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: nda
     func = vmap(vmap(func, in_axes=(None,0)), in_axes=(0,None))
     return vmap(jnp.ravel, in_axes=0)(func(X1, X2))
 
-def CovMatrixDD(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> ndarray:
+def CovMatrixDD(X1: ndarray, X2: ndarray, kernel: Kernel, kernel_params: ndarray) -> ndarray:
     '''Builds the covariance matrix between the elements of X1 and X2
     based on X1 and X2 representing gradient values of the target function.
 
@@ -185,7 +185,7 @@ def CovMatrixDD(X1: ndarray, X2: ndarray, kernel: BaseKernel, kernel_params: nda
         shape (N1, n_features)
     X2 : ndarray
         shape (N2, n_features)
-    kernel : derived class of BaseKernel
+    kernel : derived class of Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters

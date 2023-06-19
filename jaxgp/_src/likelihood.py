@@ -1,16 +1,14 @@
-from typing import Union
-
-import jax.numpy as jnp
-from jax.numpy import ndarray
-import jax.scipy as jsp
-
-from .covar import full_covariance_matrix, sparse_covariance_matrix
-from .kernels import BaseKernel
-
 from typing import Tuple
 
+import jax.numpy as jnp
+import jax.scipy as jsp
+from jax.numpy import ndarray
 
-def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: BaseKernel, kernel_params: ndarray, noise: float) -> float:
+from .covar import full_covariance_matrix, sparse_covariance_matrix
+from .kernels import Kernel
+
+
+def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
     '''Negative log marginal likelihood for the full GPR
 
     Parameters
@@ -19,7 +17,7 @@ def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: BaseKer
         Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
     Y_data : ndarray
         shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -43,7 +41,7 @@ def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: BaseKer
     
     return nlle / len(Y_data)
 
-def sparse_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: BaseKernel, kernel_params: ndarray, noise: float) -> float:
+def sparse_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
     '''Negative log marginal likelihood for the sparse GPR
 
     Parameters
@@ -54,7 +52,7 @@ def sparse_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarra
         shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
     X_ref : ndarray
         shape (n_referencepoints, n_dims). Reference points onto which the whole input dataset is projected.
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters

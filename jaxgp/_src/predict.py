@@ -6,11 +6,11 @@ from jax.numpy import ndarray
 
 from .containers import FullPrior, Posterior, SparsePrior
 from .covar import CovMatrixFD, CovMatrixFF, CovVectorID
-from .kernels import BaseKernel
+from .kernels import Kernel
 from .utils import inner_map
 
 
-def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, ndarray], kernel: BaseKernel, kernel_params: ndarray) -> Posterior:
+def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, ndarray], kernel: Kernel, kernel_params: ndarray) -> Posterior:
     '''Calculates the posterior mean and std for each point in X given prior information of the full GPR model
 
     Parameters
@@ -21,7 +21,7 @@ def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, nd
         prior distribution of the full GPR model
     X_split : Tuple[ndarray, ndarray]
         Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters
@@ -44,7 +44,7 @@ def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, nd
     
     return Posterior(means, stds)
 
-def sparse_predict(X: ndarray, covar_module: SparsePrior, X_ref: ndarray, kernel: BaseKernel, kernel_params: ndarray) -> Posterior:
+def sparse_predict(X: ndarray, covar_module: SparsePrior, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray) -> Posterior:
     '''Calculates the posterior mean and std for each point in X given prior information of the sparse GPR model
 
     Parameters
@@ -55,7 +55,7 @@ def sparse_predict(X: ndarray, covar_module: SparsePrior, X_ref: ndarray, kernel
         prior distribution of the sparse GPR model
     X_ref : ndarray
         shape (n_reference_points, n_dims). Reference points onto which the full data is projected for sparsification.
-    kernel : derived class from BaseKernel
+    kernel : derived class from Kernel
         Kernel that describes the covariance between input points.
     kernel_params : ndarray
         kernel parameters

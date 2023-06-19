@@ -5,7 +5,7 @@ from jax import jit
 import jax.numpy as jnp
 from jax.numpy import ndarray
 
-from ..kernels import BaseKernel
+from ..kernels import Kernel
 from ..utils import for_loop
 from ..regression.regression import ExactGPR
 
@@ -36,7 +36,7 @@ def _step_full_fun(X_split, Y_data, gpr, acqui_fun, eval_fun):
 class ExactBayesOpt:
     X_split: Tuple[ndarray, ndarray]
     Y_train: Tuple[ndarray, ndarray]
-    kernel: BaseKernel
+    kernel: Kernel
     acquisition_func: Callable
     eval_func: Callable
     grad: bool = True
