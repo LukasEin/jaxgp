@@ -50,3 +50,7 @@
 
 - Link: https://machinelearningmastery.com/2d-test-functions-for-function-optimization/
 - Additionally Franke function
+
+## Random links:
+
+- https://distill.pub/2019/visual-exploration-gaussian-processes/
