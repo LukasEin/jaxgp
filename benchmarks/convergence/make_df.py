@@ -31,20 +31,24 @@ def make_dict(num_f_vals, num_d_vals, optimizer, fun, eval_grid, predictions, st
     
     mses = {"mean_mse": jnp.mean(temp["mses"]), 
             "median_mse": jnp.median(temp["mses"]),
+            "std_mse": jnp.std(temp["mses"]),
             "max_mse": jnp.max(temp["mses"]),
              "min_mse": jnp.min(temp["mses"])}
     
     confs = {"mean_tic": jnp.mean(temp["true_in_confs"]), 
+             "std_tic": jnp.std(temp["true_in_confs"]),
              "max_tic": jnp.max(temp["true_in_confs"]),
              "min_tic": jnp.min(temp["true_in_confs"])}
     
     stds =  {"mean_maxstds": jnp.mean(temp["maxstds"]), 
             "median_maxstds": jnp.median(temp["maxstds"]),
+            "std_maxstds": jnp.std(temp["maxstds"]),
             "max_maxstds": jnp.max(temp["maxstds"]),
             "min_maxstds": jnp.min(temp["maxstds"])}
     
     errs =  {"mean_maxerrs": jnp.mean(temp["maxerrs"]), 
             "median_maxerrs": jnp.median(temp["maxerrs"]),
+            "std_maxerrs": jnp.std(temp["maxerrs"]),
             "max_maxerrs": jnp.max(temp["maxerrs"]),
             "min_maxerrs": jnp.min(temp["maxerrs"])}
     
