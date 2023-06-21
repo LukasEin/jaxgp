@@ -5,7 +5,6 @@ class Logger:
     '''A simple logger to write out the convergence process of the optimization
     '''
     def __init__(self) -> None:
-        self.buffer = []
         self.iters_list = []
 
     def __call__(self, output: Tuple) -> None:
@@ -16,11 +15,4 @@ class Logger:
         output : Tuple
             current parameters of the optimization process
         '''
-        self.buffer.append(output)
-
-    def write(self):
-        '''called after the optimization to save the parameters of the current optimization run
-        '''
-        self.iters_list.append(self.buffer)
-
-        self.buffer = []
+        self.iters_list.append(output)
