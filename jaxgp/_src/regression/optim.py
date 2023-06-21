@@ -17,11 +17,12 @@ def optimize(fun, params, bounds, method: Optimizer, callback=None, jit_fun=True
     else:
         opt_fun = fun
 
+    if callback is not None:
+        callback(params)
+
     solver = ScipyBoundedMinimize(fun=opt_fun, method=optimizers[method.value], callback=callback)
     result = solver.run(params, bounds, *args)
 
     print(result.state.success)
-    if callback is not None:
-        callback.write()
 
     return result.params
