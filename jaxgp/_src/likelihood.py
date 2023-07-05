@@ -4,9 +4,23 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax.numpy import ndarray
 
-from .covar import full_covariance_matrix, sparse_covariance_matrix
+from .covar import full_covariance_matrix, sparse_covariance_matrix, full_covariance_matrix_grad
 from .kernels import Kernel
 
+
+def full_NLML_grad(X_split: ndarray, Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
+    covar_module = full_covariance_matrix_grad(X_split, Y_data, kernel, kernel_params, noise)
+
+    # logdet calculattion
+    K_NN_diag = jnp.diag(covar_module.k_nn)
+    logdet = 2*jnp.sum(jnp.log(K_NN_diag))
+
+    # Fit calculation
+    fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
+
+    nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
+    
+    return nlle / len(Y_data)
 
 def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
     '''Negative log marginal likelihood for the full GPR

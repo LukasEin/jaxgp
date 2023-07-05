@@ -5,9 +5,19 @@ import jax.scipy as jsp
 from jax import vmap
 from jax.numpy import ndarray
 
+from .containers import FullPrior, SparsePrior
 from .kernels import Kernel
 from .utils import matmul_diag
-from .containers import FullPrior, SparsePrior 
+
+
+def full_covariance_matrix_grad(X_split: ndarray, Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: ndarray) -> FullPrior:
+    K_NN = CovMatrixDD(X_split, X_split, kernel, kernel_params)
+    
+    diag = jnp.diag_indices(len(K_NN))
+    K_NN = K_NN.at[diag].add(noise**2)
+
+    K_NN = jsp.linalg.cholesky(K_NN)
+    return FullPrior(K_NN, Y_data)
 
 def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> FullPrior:
     '''Calculates the full gaussian prior over the input samples in X_split.

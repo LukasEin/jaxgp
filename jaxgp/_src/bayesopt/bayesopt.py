@@ -8,6 +8,7 @@ from jax.numpy import ndarray
 from ..kernels import Kernel
 from ..utils import for_loop
 from ..regression.regression import ExactGPR
+from ..regression.optim import Optimizer
 
 
 def _step_full_grad(X_split, Y_data, gpr, acqui_fun, eval_fun):
@@ -40,7 +41,7 @@ class ExactBayesOpt:
     acquisition_func: Callable
     eval_func: Callable
     grad: bool = True
-    optimize_method: str = 0
+    optimize_method: Optimizer = Optimizer.SLSQP
     logger: Callable = None
 
     def __post_init__(self) -> None:

@@ -92,6 +92,7 @@ class RBF(Kernel):
         by default 2, if changed must be set to n_features + 1, according to the input data.
     '''
     num_params: int = 2
+    # num_params: int = 1
     
     def eval(self, x1: ndarray, x2: ndarray, params: ndarray) -> ndarray:
         '''covariance between two function evaluations at x1 and x2 
@@ -119,6 +120,8 @@ class RBF(Kernel):
 
         diff = (x1 - x2) / params[1:]
         return params[0]*jnp.exp(-0.5 * jnp.dot(diff, diff))
+        # diff = (x1 - x2) / params
+        # return jnp.exp(-0.5 * jnp.dot(diff, diff))
 
 @register_pytree_node_class  
 @dataclass  

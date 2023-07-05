@@ -13,6 +13,102 @@ from .optim import optimize, Optimizer
 
 @register_pytree_node_class
 @dataclass
+class ExactGPRGrad:
+    kernel: Kernel
+    kernel_params: Union[float, ndarray] = jnp.log(2)
+    noise: float = 1e-4
+    optimize_noise: bool = False
+    optimize_method: Optimizer = Optimizer.SLSQP
+    logger: Logger = None
+
+    def __post_init__(self) -> None:
+        if jnp.isscalar(self.kernel_params):
+            self.kernel_params = jnp.ones(self.kernel.num_params)*self.kernel_params
+
+        self.X_split = None
+        self.covar_module = None
+
+    def train(self, X_data: ndarray, Y_data: ndarray) -> None:
+        '''Fits a full gaussian process to the input data by optimizing the parameters of the model.
+
+        Parameters
+        ----------
+        X_data : Tuple[ndarray, ndarray]
+            Tuple( shape (n_function_evals, n_dims), shape (n_gradient_evals, n_dims) ). Input features at which the function and the gradient was evaluated
+        Y_data : ndarray
+            shape (n_function_evals + n_gradient_evals, ). Input labels representing noisy function evaluations
+        '''
+        self.X_split = X_data
+
+        if self.optimize_noise:
+            def optim_fun(params):
+                kernel_params = params[0]
+                noise = params[1]
+                return likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, noise)
+            
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
+
+            bounds = (lb, ub)
+
+            init_params = (self.kernel_params, self.noise)
+        else:
+            def optim_fun(kernel_params):
+                return likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, self.noise)  
+
+            bounds = (1e-3, jnp.inf)  
+
+            init_params = self.kernel_params  
+
+        optimized_params = optimize(fun=optim_fun,
+                                    params=init_params,
+                                    bounds=bounds,
+                                    method=self.optimize_method,
+                                    callback=self.logger,
+                                    jit_fun=True)
+        
+        if self.optimize_noise:
+            self.kernel_params, self.noise = optimized_params
+        else:
+            self.kernel_params = optimized_params
+
+        self.covar_module = jit(covar.full_covariance_matrix_grad)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
+
+    def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
+        '''evaluates the posterior mean and std for each point in X
+
+        Parameters
+        ----------
+        X : ndarray
+            shape (N, n_dims). Set of points for which to calculate the posterior means and stds
+
+        Returns
+        -------
+        Posterior
+            Posterior means and stds, [mean(x), std(x) for x in X]
+        '''
+        return jit(predict.full_predict_grad)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
+
+    def reset_params(self) -> None:
+        '''Resets all kernel and noise parameters to initial values of log(2).
+        '''
+        self.kernel_params = jnp.ones(self.kernel.num_params)*jnp.log(2)
+        self.noise = jnp.log(2)
+    
+    def tree_flatten(self):
+        children = (self.kernel, self.kernel_params, self.noise, self.optimize_noise, 
+                    self.optimize_method, self.logger, self.X_split, self.covar_module)
+        aux_data = None
+        return (children, aux_data)
+    
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        new = cls(*children[:-2])
+        new.X_split, new.covar_module = children[-2:]
+        return new
+
+@register_pytree_node_class
+@dataclass
 class ExactGPR:
     '''A full Gaussian Process regressor model.
 
