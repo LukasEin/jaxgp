@@ -6,7 +6,7 @@ from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 import jax.scipy as jsp
 
-from ..covar import full_covariance_matrix, sparse_covariance_matrix
+from .old_covar import full_covariance_matrix, sparse_covariance_matrix
 from ..kernels import BaseKernel
 from ..utils import CovMatrixFD, CovMatrixFF
 from .covar_nograd import full_covariance_matrix_nograd

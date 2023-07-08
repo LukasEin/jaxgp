@@ -3,8 +3,8 @@ from typing import Any, Callable, Tuple, Union
 import jax.numpy as jnp
 from jax.numpy import ndarray
 
-from ..predict import full_predict
-from ..regression.regression import ExactGPR
+from .._deprecated.old_predict import full_predict
+from ..regression.full_regression import ExactGPR
 from ..regression.optim import optimize
 
 from dataclasses import dataclass

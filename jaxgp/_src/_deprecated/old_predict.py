@@ -4,12 +4,12 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax.numpy import ndarray
 
-from .containers import FullPrior, Posterior, SparsePrior
-from .covar import CovMatrixFD, CovMatrixFF, CovVectorID
-from .kernels import Kernel
-from .utils import inner_map
+from ..distributions import FullPriorDistribution, PosteriorDistribution, SparsePriorDistribution
+from .old_covar import CovMatrixFD, CovMatrixFF, CovVectorID
+from ..kernels import Kernel
+from ..utils import inner_map
 
-def full_predict_grad(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, ndarray], kernel: Kernel, kernel_params: ndarray) -> Posterior:
+def full_predict_grad(X: ndarray, covar_module: FullPriorDistribution, X_split: Tuple[ndarray, ndarray], kernel: Kernel, kernel_params: ndarray) -> PosteriorDistribution:
     full_vectors = CovMatrixFD(X, X_split, kernel, kernel_params)
 
     means = full_vectors@jsp.linalg.cho_solve((covar_module.k_nn, False),covar_module.y_data)
@@ -19,9 +19,9 @@ def full_predict_grad(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarra
     K_XNNX = inner_map(covar_module.k_nn, full_vectors)       
     stds = jnp.sqrt(K_XX - K_XNNX)
     
-    return Posterior(means, stds)
+    return PosteriorDistribution(means, stds)
 
-def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, ndarray], kernel: Kernel, kernel_params: ndarray) -> Posterior:
+def full_predict(X: ndarray, covar_module: FullPriorDistribution, X_split: Tuple[ndarray, ndarray], kernel: Kernel, kernel_params: ndarray) -> PosteriorDistribution:
     '''Calculates the posterior mean and std for each point in X given prior information of the full GPR model
 
     Parameters
@@ -53,9 +53,9 @@ def full_predict(X: ndarray, covar_module: FullPrior, X_split: Tuple[ndarray, nd
     K_XNNX = inner_map(covar_module.k_nn, full_vectors)       
     stds = jnp.sqrt(K_XX - K_XNNX)
     
-    return Posterior(means, stds)
+    return PosteriorDistribution(means, stds)
 
-def sparse_predict(X: ndarray, covar_module: SparsePrior, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray) -> Posterior:
+def sparse_predict(X: ndarray, covar_module: SparsePriorDistribution, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray) -> PosteriorDistribution:
     '''Calculates the posterior mean and std for each point in X given prior information of the sparse GPR model
 
     Parameters
@@ -89,4 +89,4 @@ def sparse_predict(X: ndarray, covar_module: SparsePrior, X_ref: ndarray, kernel
     
     stds = jnp.sqrt(K_XX - Q_XX + K_XMMX) 
     
-    return Posterior(means, stds)
+    return PosteriorDistribution(means, stds)

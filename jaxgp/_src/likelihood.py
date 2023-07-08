@@ -1,28 +1,26 @@
-from typing import Tuple
+from dataclasses import dataclass
+
+from typing import Callable
 
 import jax.numpy as jnp
 import jax.scipy as jsp
-from jax.numpy import ndarray
 
-from .covar import full_covariance_matrix, sparse_covariance_matrix, full_covariance_matrix_grad
-from .kernels import Kernel
+from .distributions import FullPriorDistribution, SparsePriorDistribution
 
 
-def full_NLML_grad(X_split: ndarray, Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
-    covar_module = full_covariance_matrix_grad(X_split, Y_data, kernel, kernel_params, noise)
+@dataclass(frozen=True)
+class NegativeLogMarginalLikelihood:
+    sparse: bool = False
 
-    # logdet calculattion
-    K_NN_diag = jnp.diag(covar_module.k_nn)
-    logdet = 2*jnp.sum(jnp.log(K_NN_diag))
+    def __call__(self) -> Callable:
+        if self.sparse:
+            return _fitc_NLML
+        else:
+            return _full_NLML
+        
 
-    # Fit calculation
-    fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
 
-    nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
-    
-    return nlle / len(Y_data)
-
-def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
+def _full_NLML(Prior: FullPriorDistribution) -> float:
     '''Negative log marginal likelihood for the full GPR
 
     Parameters
@@ -42,20 +40,18 @@ def full_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel,
     -------
     float
     '''
-    covar_module = full_covariance_matrix(X_split, Y_data, kernel, kernel_params, noise)
-
-    # logdet calculattion
-    K_NN_diag = jnp.diag(covar_module.k_nn)
+    # logdet calculation
+    K_NN_diag = jnp.diag(Prior.k_nn)
     logdet = 2*jnp.sum(jnp.log(K_NN_diag))
 
     # Fit calculation
-    fit = Y_data.T@jsp.linalg.cho_solve((covar_module.k_nn, False), Y_data)
+    fit = Prior.y_data.T@jsp.linalg.cho_solve((Prior.k_nn, False), Prior.y_data)
 
-    nlle = 0.5*(logdet + fit + len(Y_data)*jnp.log(2*jnp.pi))
+    nlle = 0.5*(logdet + fit + len(Prior.y_data)*jnp.log(2*jnp.pi))
     
-    return nlle / len(Y_data)
+    return nlle / len(Prior.y_data)
 
-def sparse_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> float:
+def _fitc_NLML(Prior: SparsePriorDistribution) -> float:
     '''Negative log marginal likelihood for the sparse GPR
 
     Parameters
@@ -77,17 +73,15 @@ def sparse_NLML(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarra
     -------
     float
     '''
-    covar_module = sparse_covariance_matrix(X_split, Y_data, X_ref, kernel, kernel_params, noise)
-
     # Logdet calculations
-    U_inv_diag = jnp.diag(covar_module.U_inv)
+    U_inv_diag = jnp.diag(Prior.U_inv)
     logdet_K_inv = 2*jnp.sum(jnp.log(U_inv_diag))
-    logdet_fitc = jnp.sum(jnp.log(covar_module.diag))
+    logdet_fitc = jnp.sum(jnp.log(Prior.diag))
 
     # Fit calculation
-    Y_scaled = Y_data / jnp.sqrt(covar_module.diag)
-    fit = Y_scaled.T@Y_scaled - covar_module.proj_labs.T@covar_module.proj_labs
+    Y_scaled = Prior.y_data / jnp.sqrt(Prior.diag)
+    fit = Y_scaled.T@Y_scaled - Prior.proj_labs.T@Prior.proj_labs
 
-    nlle = 0.5*(logdet_fitc + logdet_K_inv + fit + len(Y_data)*jnp.log(2*jnp.pi))
+    nlle = 0.5*(logdet_fitc + logdet_K_inv + fit + len(Prior.y_data)*jnp.log(2*jnp.pi))
     
-    return nlle / len(Y_data)
+    return nlle / len(Prior.y_data)

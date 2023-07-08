@@ -6,7 +6,11 @@ from jax import jit
 from jax.numpy import ndarray
 from jaxopt import ScipyBoundedMinimize
 
-from .. import covar, likelihood, predict
+from . import old_predict
+
+from . import old_covar
+
+from . import old_likelihood
 from ..kernels import BaseKernel
 from ..logger import Logger
 from .predict_nograd import *

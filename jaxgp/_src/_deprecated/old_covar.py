@@ -5,21 +5,21 @@ import jax.scipy as jsp
 from jax import vmap
 from jax.numpy import ndarray
 
-from .containers import FullPrior, SparsePrior
-from .kernels import Kernel
-from .utils import matmul_diag
+from ..distributions import FullPriorDistribution, SparsePriorDistribution
+from ..kernels import Kernel
+from ..utils import matmul_diag
 
 
-def full_covariance_matrix_grad(X_split: ndarray, Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: ndarray) -> FullPrior:
+def full_covariance_matrix_grad(X_split: ndarray, Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: ndarray) -> FullPriorDistribution:
     K_NN = CovMatrixDD(X_split, X_split, kernel, kernel_params)
     
     diag = jnp.diag_indices(len(K_NN))
     K_NN = K_NN.at[diag].add(noise**2)
 
     K_NN = jsp.linalg.cholesky(K_NN)
-    return FullPrior(K_NN, Y_data)
+    return FullPriorDistribution(K_NN, Y_data)
 
-def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> FullPrior:
+def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> FullPriorDistribution:
     '''Calculates the full gaussian prior over the input samples in X_split.
 
     Parameters
@@ -53,9 +53,9 @@ def full_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, ke
     K_NN = K_NN.at[diag].add(noise**2)
 
     K_NN = jsp.linalg.cholesky(K_NN)
-    return FullPrior(K_NN, Y_data)
+    return FullPriorDistribution(K_NN, Y_data)
 
-def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> SparsePrior:
+def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, X_ref: ndarray, kernel: Kernel, kernel_params: ndarray, noise: float) -> SparsePriorDistribution:
     '''Calculates the sparse gaussian prior over the input samples in X_split, projected onto the reference points X_ref.
 
     Parameters
@@ -113,7 +113,7 @@ def sparse_covariance_matrix(X_split: Tuple[ndarray, ndarray], Y_data: ndarray, 
 
     projected_label = jsp.linalg.solve_triangular(U_inv.T, V@(Y_data / fitc_diag), lower=True)
 
-    return SparsePrior(U_ref, U_inv, fitc_diag, projected_label)
+    return SparsePriorDistribution(U_ref, U_inv, fitc_diag, projected_label)
 
 def CovVectorID(X: ndarray, kernel: Kernel, kernel_params: ndarray) -> ndarray:
     '''Calculates the covariance of each point in X with itself

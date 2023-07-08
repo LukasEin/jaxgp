@@ -1,23 +1,25 @@
-from typing import NamedTuple
+from typing import NamedTuple, Union
 
 from jax.numpy import ndarray
 
 
-class SparsePrior(NamedTuple):
+class SparsePriorDistribution(NamedTuple):
     '''Prior distribution of a sparse GPR model.
     '''
+    x_ref: ndarray
     U_ref: ndarray
     U_inv: ndarray
     diag: ndarray
     proj_labs: ndarray
 
-class FullPrior(NamedTuple):
+class FullPriorDistribution(NamedTuple):
     '''Prior distribution of a full GPR model.
     '''
-    k_nn: ndarray
+    x_data: ndarray
     y_data: ndarray
+    k_nn: ndarray
 
-class Posterior(NamedTuple):
+class PosteriorDistribution(NamedTuple):
     '''Posterior distribution described by a mean and std vector'''
     mean: ndarray
     std: ndarray

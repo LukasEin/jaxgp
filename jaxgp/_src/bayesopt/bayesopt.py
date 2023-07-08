@@ -7,7 +7,7 @@ from jax.numpy import ndarray
 
 from ..kernels import Kernel
 from ..utils import for_loop
-from ..regression.regression import ExactGPR
+from ..regression.full_regression import ExactGPR
 from ..regression.optim import Optimizer
 
 

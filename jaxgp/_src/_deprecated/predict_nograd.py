@@ -6,7 +6,7 @@ from jax import jit, vmap
 from jax.numpy import ndarray
 from jax.scipy.linalg import solve
 
-from ..covar import FullCovar, SparseCovar
+from .old_covar import FullCovar, SparseCovar
 from ..kernels import BaseKernel
 from ..utils import CovMatrixFD, CovMatrixFF, _build_xT_Ainv_x, _CovVector_Id
 

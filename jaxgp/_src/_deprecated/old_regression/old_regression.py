@@ -6,10 +6,10 @@ from jax import jit
 from jax.numpy import ndarray
 from jax.tree_util import register_pytree_node_class
 
-from .. import covar, likelihood, predict
+from .. import old_covar, old_likelihood, old_predict
 from ..kernels import Kernel
 from ..logger import Logger
-from .optim import optimize, Optimizer
+from .old_optim import optimize, Optimizer
 
 @register_pytree_node_class
 @dataclass
@@ -44,9 +44,9 @@ class ExactGPRGrad:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
-                return likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, noise)
+                return old_likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, noise)
             
-            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
+            lb = (jnp.ones_like(self.kernel_params)*1e-3, jnp.ones_like(self.noise)*1e-3)
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
 
             bounds = (lb, ub)
@@ -54,7 +54,7 @@ class ExactGPRGrad:
             init_params = (self.kernel_params, self.noise)
         else:
             def optim_fun(kernel_params):
-                return likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, self.noise)  
+                return old_likelihood.full_NLML_grad(self.X_split, Y_data, self.kernel, kernel_params, self.noise)  
 
             bounds = (1e-3, jnp.inf)  
 
@@ -72,7 +72,7 @@ class ExactGPRGrad:
         else:
             self.kernel_params = optimized_params
 
-        self.covar_module = jit(covar.full_covariance_matrix_grad)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
+        self.covar_module = jit(old_covar.full_covariance_matrix_grad)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -87,7 +87,7 @@ class ExactGPRGrad:
         Posterior
             Posterior means and stds, [mean(x), std(x) for x in X]
         '''
-        return jit(predict.full_predict_grad)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
+        return jit(old_predict.full_predict_grad)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
 
     def reset_params(self) -> None:
         '''Resets all kernel and noise parameters to initial values of log(2).
@@ -158,7 +158,7 @@ class ExactGPR:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
-                return likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, noise)
+                return old_likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
@@ -168,7 +168,7 @@ class ExactGPR:
             init_params = (self.kernel_params, self.noise)
         else:
             def optim_fun(kernel_params):
-                return likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, self.noise)  
+                return old_likelihood.full_NLML(self.X_split, Y_data, self.kernel, kernel_params, self.noise)  
 
             bounds = (1e-3, jnp.inf)  
 
@@ -186,7 +186,7 @@ class ExactGPR:
         else:
             self.kernel_params = optimized_params
 
-        self.covar_module = jit(covar.full_covariance_matrix)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
+        self.covar_module = jit(old_covar.full_covariance_matrix)(self.X_split, Y_data, self.kernel, self.kernel_params, self.noise)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -201,7 +201,7 @@ class ExactGPR:
         Posterior
             Posterior means and stds, [mean(x), std(x) for x in X]
         '''
-        return jit(predict.full_predict)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
+        return jit(old_predict.full_predict)(X, self.covar_module, self.X_split, self.kernel, self.kernel_params)
 
     def reset_params(self) -> None:
         '''Resets all kernel and noise parameters to initial values of log(2).
@@ -281,7 +281,7 @@ class SparseGPR:
                 kernel_params = params[0]
                 noise = params[1]
                 X_ref = params[2]
-                return likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, noise)
+                return old_likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.X_ref)*(self.ref_bounds[0]))
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.X_ref)*(self.ref_bounds[1]))
@@ -293,7 +293,7 @@ class SparseGPR:
             def optim_fun(params):
                 kernel_params = params[0]
                 X_ref = params[1]
-                return likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, self.noise)
+                return old_likelihood.sparse_NLML(self.X_split, Y_data, X_ref, self.kernel, kernel_params, self.noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.X_ref)*(-jnp.inf))
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.X_ref)*jnp.inf)
@@ -305,7 +305,7 @@ class SparseGPR:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, kernel_params, noise)
+                return old_likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, kernel_params, noise)
             
             lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3)
             ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf)
@@ -315,7 +315,7 @@ class SparseGPR:
             init_params = (self.kernel_params, self.noise)
         else:
             def optim_fun(params):
-                return likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, params, self.noise)
+                return old_likelihood.sparse_NLML(self.X_split, Y_data, self.X_ref, self.kernel, params, self.noise)
 
             bounds = (1e-3, jnp.inf)  
 
@@ -337,7 +337,7 @@ class SparseGPR:
         else:
             self.kernel_params = optimized_params
 
-        self.covar_module = jit(covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.kernel, self.kernel_params, self.noise)
+        self.covar_module = jit(old_covar.sparse_covariance_matrix)(self.X_split, Y_data, self.X_ref, self.kernel, self.kernel_params, self.noise)
 
     def eval(self, X: ndarray) -> Tuple[ndarray, ndarray]:
         '''evaluates the posterior mean and std for each point in X
@@ -352,4 +352,4 @@ class SparseGPR:
         Posterior
             Posterior means and stds, [mean(x), std(x) for x in X]
         '''
-        return jit(predict.sparse_predict)(X, self.covar_module, self.X_ref, self.kernel, self.kernel_params)
+        return jit(old_predict.sparse_predict)(X, self.covar_module, self.X_ref, self.kernel, self.kernel_params)
