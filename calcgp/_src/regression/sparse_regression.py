@@ -16,12 +16,13 @@ from .optimizer import OptimizerTypes, parameter_optimize
 
 @dataclass
 class SparseGPRBase(ABC):
-    kernel: Kernel
     Xref: ndarray
+    kernel: Kernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
     noise: Union[float, ndarray] = 1e-2
     optim_method: OptimizerTypes = OptimizerTypes.SLSQP
     optim_noise: bool = False
+    optim_ref: bool = False
     logger: Logger = None
 
     def __post_init__(self):
@@ -43,7 +44,7 @@ class SparseGPRBase(ABC):
         prior_func = self.prior()
         nlml_func = self.nlml()
 
-        if self.optimize_noise and self.optimize_ref:
+        if self.optim_noise and self.optim_ref:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
@@ -56,7 +57,7 @@ class SparseGPRBase(ABC):
             bounds = (lb, ub)
 
             init_params = (self.kernel_params, self.noise, self.Xref)
-        elif self.optimize_ref:
+        elif self.optim_ref:
             def optim_fun(params):
                 kernel_params = params[0]
                 Xref = params[1]
@@ -68,7 +69,7 @@ class SparseGPRBase(ABC):
             bounds = (lb, ub)
 
             init_params = (self.kernel_params, self.Xref)
-        elif self.optimize_noise:
+        elif self.optim_noise:
             def optim_fun(params):
                 kernel_params = params[0]
                 noise = params[1]
@@ -95,11 +96,11 @@ class SparseGPRBase(ABC):
                                               callback=self.logger,
                                               jit_fun=True)
         
-        if self.optimize_noise and self.optimize_ref:
+        if self.optim_noise and self.optim_ref:
             self.kernel_params, self.noise, self.Xref = optimized_params
-        elif self.optimize_ref:
+        elif self.optim_ref:
             self.kernel_params, self.Xref = optimized_params
-        elif self.optimize_noise:
+        elif self.optim_noise:
             self.kernel_params, self.noise = optimized_params
         else:
             self.kernel_params = optimized_params
