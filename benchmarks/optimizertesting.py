@@ -3,9 +3,9 @@ from typing import Callable, Tuple, Union
 import jax.numpy as jnp
 from jax import Array, grad, jit, random, vmap
 
-from jaxgp.regression import ExactGPR, SparseGPR
-from jaxgp.kernels import BaseKernel
-from jaxgp.utils import Logger
+from calcgp.regression import ExactGPR, SparseGPR
+from calcgp.kernels import BaseKernel
+from calcgp.utils import Logger
    
 
 def compare_optimizer_data(functions: list[Callable], ranges: list[Tuple[float, float]], names: list[str], optimizers: str, num_gridpoints: Array, in_dir: str, write: Callable):

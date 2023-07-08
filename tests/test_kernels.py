@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import pytest
 
-from jaxgp.kernels import *
+from calcgp.kernels import *
 
 class TestBase:
     kernel = BaseKernel()

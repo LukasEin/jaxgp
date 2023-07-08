@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 from jax import random, jit
 
-from jaxgp.covar import full_covariance_matrix, sparse_covariance_matrix
-from jaxgp.kernels import RBF
+from calcgp.covar import full_covariance_matrix, sparse_covariance_matrix
+from calcgp.kernels import RBF
 
 from timeit import timeit, repeat
 

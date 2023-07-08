@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 import numpy as onp
 
-from jaxgp.kernels import RBF
-from jaxgp.regression import ExactGPR
+from calcgp.kernels import RBF
+from calcgp.regression import ExactGPR
 
 def mean_err(x):
     new = x[~onp.isnan(x)]
