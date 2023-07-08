@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from jax import random, jit
 
-from calcgp.covar import full_covariance_matrix, sparse_covariance_matrix
+from calcgp.custom_buildblocks import Prior
 from calcgp.kernels import RBF
 
 from timeit import timeit, repeat
@@ -21,6 +21,8 @@ NUM_F_VALS = 1
 NOISE = 0.02
 KERNEL = RBF()
 KERNEL_PARAMS = jnp.ones(2)*jnp.log(2)
+FULL_COV = Prior()
+SPARSE_COV = Prior(sparse=True)
 
 def _train_data(num_d_vals):
     # initial seed for the pseudo random key generation
@@ -51,13 +53,14 @@ def ref_from_data(X_split, num_ref_points):
     return X_ref_rand
 
 def full_timing(start, stop, step):
+    cov_func = FULL_COV()
     times = []
 
     for i in range(start, stop, step):
         X_train, Y_train = _train_data(i)
 
         def test():
-            X = jit(full_covariance_matrix)(X_train, Y_train, KERNEL, KERNEL_PARAMS, NOISE)
+            X = jit(cov_func)(X_train, Y_train, KERNEL, KERNEL_PARAMS, NOISE)
 
         times.append(repeat(test, number=10)[1:])
 
@@ -66,6 +69,7 @@ def full_timing(start, stop, step):
     jnp.save(f"full_time_{start}_{stop}_{step}", avg_times)
 
 def sparse_timing_fixed_percent(start, stop, step, percent):
+    cov_func = SPARSE_COV()
     times = []
 
     for i in range(start, stop, step):
@@ -74,7 +78,7 @@ def sparse_timing_fixed_percent(start, stop, step, percent):
         X_ref = ref_from_data(X_train, num_ref_points)
 
         def test():
-            X = jit(sparse_covariance_matrix)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
+            X = jit(cov_func)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
 
         times.append(repeat(test, number=10)[1:])
 
@@ -83,6 +87,7 @@ def sparse_timing_fixed_percent(start, stop, step, percent):
     jnp.save(f"sparse_time_{start}_{stop}_{step}", avg_times)
 
 def sparse_timing_fixed_max(num_data):
+    cov_func = SPARSE_COV()
     X_train, Y_train = _train_data(num_data)
     times = []
 
@@ -93,7 +98,7 @@ def sparse_timing_fixed_max(num_data):
         X_ref = ref_from_data(X_train, num_ref_points)
 
         def test():
-            X = jit(sparse_covariance_matrix)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
+            X = jit(cov_func)(X_train, Y_train, X_ref, KERNEL, KERNEL_PARAMS, NOISE)
 
         times.append(repeat(test, number=10)[1:])
 
