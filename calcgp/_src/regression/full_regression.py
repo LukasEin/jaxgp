@@ -1,15 +1,16 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Tuple, Union
-from abc import ABC, abstractmethod
 
 import jax.numpy as jnp
 from jax import jit
 from jax.numpy import ndarray
 
-from ..kernels import Kernel
-from ..logger import Logger
 from ..covar.covar import DataMode, Prior
+from ..distributions import PosteriorDistribution
+from ..kernels import Kernel
 from ..likelihood import NegativeLogMarginalLikelihood
+from ..logger import Logger
 from ..posterior import Posterior
 from .optimizer import OptimizerTypes, parameter_optimize
 
@@ -95,7 +96,12 @@ class FullGradient(FullGPRBase):
     def predict(self, X_test):
         self.posterior = Posterior(prior_mode=self.prior.mode, posterior_mode=DataMode.GRAD)
 
-        return self._predict(X_test)
+        mean, std = self._predict(X_test)
+
+        mean = mean.reshape(X_test.shape)
+        std = std.reshape(X_test.shape)
+
+        return PosteriorDistribution(mean, std)
     
 
 
