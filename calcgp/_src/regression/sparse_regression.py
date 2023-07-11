@@ -20,7 +20,7 @@ class SparseGPRBase(ABC):
     Xref: ndarray
     kernel: Kernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
-    noise: Union[float, ndarray] = 1e-2
+    noise: Union[float, ndarray] = jnp.log(2)
     optim_method: OptimizerTypes = OptimizerTypes.SLSQP
     optim_noise: bool = False
     optim_ref: bool = False
@@ -52,8 +52,8 @@ class SparseGPRBase(ABC):
                 Xref = params[2]
                 return nlml_func(prior_func(X_data, Y_data, Xref, self.kernel, kernel_params, noise))
             
-            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.Xref)*(self.ref_bounds[0]))
-            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.Xref)*(self.ref_bounds[1]))
+            lb = (jnp.ones_like(self.kernel_params)*1e-6, jnp.ones_like(self.noise)*1e-3, jnp.ones_like(self.Xref)*(-jnp.inf))
+            ub = (jnp.ones_like(self.kernel_params)*jnp.inf, jnp.ones_like(self.noise)*jnp.inf, jnp.ones_like(self.Xref)*jnp.inf)
 
             bounds = (lb, ub)
 

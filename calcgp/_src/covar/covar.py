@@ -184,4 +184,4 @@ def _fitc_cov_base(Y_data, K_MN, K_NN_diag, X_ref, kernel, kernel_params, noise)
 
     projected_label = jsp.linalg.solve_triangular(U_inv.T, V@(Y_data / fitc_diag), lower=True)
 
-    return SparsePriorDistribution(X_ref, U_ref, U_inv, fitc_diag, projected_label)
+    return SparsePriorDistribution(Y_data, X_ref, U_ref, U_inv, fitc_diag, projected_label)

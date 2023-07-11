@@ -6,6 +6,7 @@ from jax.numpy import ndarray
 class SparsePriorDistribution(NamedTuple):
     '''Prior distribution of a sparse GPR model.
     '''
+    y_data: ndarray
     x_ref: ndarray
     U_ref: ndarray
     U_inv: ndarray

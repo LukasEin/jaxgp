@@ -19,7 +19,7 @@ from .optimizer import OptimizerTypes, parameter_optimize
 class FullGPRBase(ABC):
     kernel: Kernel
     kernel_params: Union[float, ndarray] = jnp.log(2)
-    noise: Union[float, ndarray] = 1e-2
+    noise: Union[float, ndarray] = jnp.log(2)
     optim_method: OptimizerTypes = OptimizerTypes.SLSQP
     optim_noise: bool = False
     logger: Logger = None
